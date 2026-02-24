@@ -40,6 +40,7 @@ func (h *Handler) processFlowItem(item flowItem) {
 	if ok {
 		inFlow, outFlow := h.scaleFlowByTunnel(forwardID, item.D, item.U)
 		_ = h.repo.AddFlow(forwardID, userID, userTunnelID, inFlow, outFlow)
+		h.processPeerShareFlowFromForward(forwardID, item)
 
 		if userTunnelID > 0 {
 			h.enforceFlowPolicies(userID, userTunnelID)
@@ -87,6 +88,23 @@ func parsePeerShareRuntimeServiceID(serviceName string) (int64, bool) {
 	return runtimeID, true
 }
 
+func parsePeerShareIDFromFederationTunnelName(tunnelName string) (int64, bool) {
+	tunnelName = strings.TrimSpace(tunnelName)
+	if !strings.HasPrefix(tunnelName, "Share-") {
+		return 0, false
+	}
+	raw := strings.TrimPrefix(tunnelName, "Share-")
+	idx := strings.Index(raw, "-Port-")
+	if idx <= 0 {
+		return 0, false
+	}
+	shareID, err := strconv.ParseInt(raw[:idx], 10, 64)
+	if err != nil || shareID <= 0 {
+		return 0, false
+	}
+	return shareID, true
+}
+
 func (h *Handler) processPeerShareFlow(runtimeID int64, item flowItem) {
 	if h == nil || h.repo == nil || runtimeID <= 0 {
 		return
@@ -104,6 +122,44 @@ func (h *Handler) processPeerShareFlow(runtimeID int64, item flowItem) {
 	_ = h.repo.AddPeerShareCurrentFlow(runtime.ShareID, delta)
 
 	share, err := h.repo.GetPeerShare(runtime.ShareID)
+	if err != nil || share == nil {
+		return
+	}
+	if !isPeerShareFlowExceeded(share) {
+		return
+	}
+	h.enforcePeerShareFlowLimit(share.ID)
+}
+
+func (h *Handler) processPeerShareFlowFromForward(forwardID int64, item flowItem) {
+	if h == nil || h.repo == nil || forwardID <= 0 {
+		return
+	}
+	forward, err := h.getForwardRecord(forwardID)
+	if err != nil || forward == nil {
+		return
+	}
+	tunnel, err := h.getTunnelRecord(forward.TunnelID)
+	if err != nil || tunnel == nil {
+		return
+	}
+	tunnelName, err := h.repo.GetTunnelName(forward.TunnelID)
+	if err != nil {
+		return
+	}
+	shareID, ok := parsePeerShareIDFromFederationTunnelName(tunnelName)
+	if !ok {
+		return
+	}
+
+	delta := item.D + item.U
+	if delta <= 0 {
+		return
+	}
+
+	_ = h.repo.AddPeerShareCurrentFlow(shareID, delta)
+
+	share, err := h.repo.GetPeerShare(shareID)
 	if err != nil || share == nil {
 		return
 	}
