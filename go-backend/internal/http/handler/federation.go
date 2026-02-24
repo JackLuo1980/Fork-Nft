@@ -1277,26 +1277,31 @@ type federationForwardServiceBinding struct {
 	Port int
 }
 
-func parseFederationForwardServiceBindings(data interface{}) []federationForwardServiceBinding {
+func extractFederationServiceEntries(data interface{}) []map[string]interface{} {
+	if data == nil {
+		return nil
+	}
+
+	if entries := asMapSlice(data); len(entries) > 0 {
+		return entries
+	}
+
 	dataMap, ok := data.(map[string]interface{})
 	if !ok {
 		return nil
 	}
-	rawServices, ok := dataMap["services"]
-	if !ok {
-		return nil
-	}
-	serviceList, ok := rawServices.([]interface{})
-	if !ok {
-		return nil
+
+	if entries := asMapSlice(dataMap["services"]); len(entries) > 0 {
+		return entries
 	}
 
+	return nil
+}
+
+func parseFederationForwardServiceBindings(data interface{}) []federationForwardServiceBinding {
+	serviceList := extractFederationServiceEntries(data)
 	bindings := make([]federationForwardServiceBinding, 0, len(serviceList))
-	for _, item := range serviceList {
-		svcMap, ok := item.(map[string]interface{})
-		if !ok {
-			continue
-		}
+	for _, svcMap := range serviceList {
 		name := normalizeForwardRuntimeServiceName(asString(svcMap["name"]))
 		if name == "" {
 			continue
@@ -1365,36 +1370,26 @@ func validateFederationCommandPorts(share *repo.PeerShare, data interface{}) err
 	if share == nil || (share.PortRangeStart <= 0 && share.PortRangeEnd <= 0) {
 		return nil
 	}
-	dataMap, ok := data.(map[string]interface{})
-	if !ok {
+
+	serviceList := extractFederationServiceEntries(data)
+	if len(serviceList) == 0 {
 		return nil
 	}
-
-	if services, ok := dataMap["services"]; ok {
-		serviceList, ok := services.([]interface{})
-		if !ok {
-			return fmt.Errorf("invalid services format")
+	for _, svcMap := range serviceList {
+		addr := asString(svcMap["addr"])
+		if addr == "" {
+			continue
 		}
-		for _, svc := range serviceList {
-			svcMap, ok := svc.(map[string]interface{})
-			if !ok {
-				return fmt.Errorf("invalid service entry format")
-			}
-			addr, ok := svcMap["addr"].(string)
-			if !ok || addr == "" {
-				continue
-			}
-			_, portStr, err := net.SplitHostPort(addr)
-			if err != nil {
-				return fmt.Errorf("invalid service address: %s", addr)
-			}
-			port, err := strconv.Atoi(portStr)
-			if err != nil || port <= 0 {
-				return fmt.Errorf("invalid port in service address: %s", addr)
-			}
-			if port < share.PortRangeStart || port > share.PortRangeEnd {
-				return fmt.Errorf("port %d out of allowed range %d-%d", port, share.PortRangeStart, share.PortRangeEnd)
-			}
+		_, portStr, err := net.SplitHostPort(addr)
+		if err != nil {
+			return fmt.Errorf("invalid service address: %s", addr)
+		}
+		port, err := strconv.Atoi(portStr)
+		if err != nil || port <= 0 {
+			return fmt.Errorf("invalid port in service address: %s", addr)
+		}
+		if port < share.PortRangeStart || port > share.PortRangeEnd {
+			return fmt.Errorf("port %d out of allowed range %d-%d", port, share.PortRangeStart, share.PortRangeEnd)
 		}
 	}
 

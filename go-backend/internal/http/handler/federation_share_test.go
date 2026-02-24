@@ -670,6 +670,72 @@ func TestBindPeerShareForwardRuntimeServicesOnlyBindsForwardRole(t *testing.T) {
 	}
 }
 
+func TestBindPeerShareForwardRuntimeServicesAcceptsTopLevelServiceArray(t *testing.T) {
+	r, err := repo.Open(filepath.Join(t.TempDir(), "panel.db"))
+	if err != nil {
+		t.Fatalf("open sqlite: %v", err)
+	}
+	t.Cleanup(func() { _ = r.Close() })
+
+	h := New(r, "test-jwt-secret")
+	now := time.Now().UnixMilli()
+
+	if err := r.CreatePeerShare(&repo.PeerShare{
+		Name:           "bind-array-share",
+		NodeID:         1,
+		Token:          "bind-array-token",
+		MaxBandwidth:   0,
+		CurrentFlow:    0,
+		PortRangeStart: 26100,
+		PortRangeEnd:   26120,
+		IsActive:       1,
+		CreatedTime:    now,
+		UpdatedTime:    now,
+	}); err != nil {
+		t.Fatalf("create share: %v", err)
+	}
+	share, err := r.GetPeerShareByToken("bind-array-token")
+	if err != nil || share == nil {
+		t.Fatalf("load share: %v", err)
+	}
+
+	if err := r.DB().Exec(`
+		INSERT INTO peer_share_runtime(id, share_id, node_id, reservation_id, resource_key, binding_id, role, chain_name, service_name, protocol, strategy, port, target, applied, status, created_time, updated_time)
+		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`,
+		1, share.ID, share.NodeID, "bind-array-r1", "bind-array-rk1", "", "forward", "", "", "tcp", "fifo", 26101, "", 0, 1, now, now,
+	).Error; err != nil {
+		t.Fatalf("insert runtime: %v", err)
+	}
+
+	h.bindPeerShareForwardRuntimeServices(share, []interface{}{
+		map[string]interface{}{"name": "99_2_10_tcp", "addr": "[::]:26101"},
+		map[string]interface{}{"name": "99_2_10_udp", "addr": "[::]:26101"},
+	})
+
+	forwardServiceName := ""
+	if err := r.DB().Raw(`SELECT service_name FROM peer_share_runtime WHERE id = 1`).Scan(&forwardServiceName).Error; err != nil {
+		t.Fatalf("load forward runtime service name: %v", err)
+	}
+	if forwardServiceName != "99_2_10" {
+		t.Fatalf("expected forward runtime service name bound from top-level array, got %q", forwardServiceName)
+	}
+}
+
+func TestValidateFederationCommandPortsAcceptsTopLevelServiceArray(t *testing.T) {
+	share := &repo.PeerShare{
+		PortRangeStart: 26200,
+		PortRangeEnd:   26210,
+	}
+	err := validateFederationCommandPorts(share, []interface{}{
+		map[string]interface{}{"name": "11_2_10_tcp", "addr": "[::]:26201"},
+		map[string]interface{}{"name": "11_2_10_udp", "addr": "[::]:26201"},
+	})
+	if err != nil {
+		t.Fatalf("expected top-level service array to pass port validation, got: %v", err)
+	}
+}
+
 func TestFederationRemoteUsageList(t *testing.T) {
 	r, err := repo.Open(filepath.Join(t.TempDir(), "panel.db"))
 	if err != nil {
