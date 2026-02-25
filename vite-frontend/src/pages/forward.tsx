@@ -244,17 +244,7 @@ export default function ForwardPage() {
   const mergeFederationShareFlow = async (
     forwardsData: Forward[],
   ): Promise<Forward[]> => {
-    const shareIds = new Set<number>();
-
-    forwardsData.forEach((forward) => {
-      const shareId = parseShareIdFromTunnelName(forward.tunnelName || "");
-
-      if (shareId) {
-        shareIds.add(shareId);
-      }
-    });
-
-    if (shareIds.size === 0) {
+    if (forwardsData.length === 0) {
       return forwardsData;
     }
 
@@ -265,6 +255,7 @@ export default function ForwardPage() {
       ]);
 
       const flowByShare = new Map<number, number>();
+      const shareIdsByTunnel = new Map<number, Set<number>>();
 
       if (usageRes.code === 0 && Array.isArray(usageRes.data)) {
         usageRes.data.forEach((item: Record<string, unknown>) => {
@@ -280,6 +271,34 @@ export default function ForwardPage() {
             const prev = flowByShare.get(shareId) || 0;
 
             flowByShare.set(shareId, Math.max(prev, currentFlow));
+          }
+
+          if (Number.isFinite(shareId) && shareId > 0) {
+            const bindings = Array.isArray(item.bindings)
+              ? (item.bindings as Array<Record<string, unknown>>)
+              : [];
+
+            bindings.forEach((binding) => {
+              const tunnelId = Number(binding.tunnelId || 0);
+              const chainType = Number(binding.chainType || 0);
+
+              if (!Number.isFinite(tunnelId) || tunnelId <= 0) {
+                return;
+              }
+
+              if (Number.isFinite(chainType) && chainType !== 1) {
+                return;
+              }
+
+              let shareSet = shareIdsByTunnel.get(tunnelId);
+
+              if (!shareSet) {
+                shareSet = new Set<number>();
+                shareIdsByTunnel.set(tunnelId, shareSet);
+              }
+
+              shareSet.add(shareId);
+            });
           }
         });
       }
@@ -306,10 +325,58 @@ export default function ForwardPage() {
         return forwardsData;
       }
 
+      const resolveShareIdForForward = (forward: Forward): number | null => {
+        const candidates = new Set<number>();
+        const shareIdFromName = parseShareIdFromTunnelName(forward.tunnelName || "");
+
+        if (shareIdFromName) {
+          candidates.add(shareIdFromName);
+        }
+
+        const tunnelId = Number(forward.tunnelId || 0);
+        const shareSetByTunnel = shareIdsByTunnel.get(tunnelId);
+
+        if (shareSetByTunnel && shareSetByTunnel.size > 0) {
+          shareSetByTunnel.forEach((shareId) => {
+            if (Number.isFinite(shareId) && shareId > 0) {
+              candidates.add(shareId);
+            }
+          });
+        }
+
+        if (candidates.size === 0) {
+          return null;
+        }
+
+        let bestShareId: number | null = null;
+        let bestFlow = 0;
+
+        candidates.forEach((shareId) => {
+          const shareFlow = flowByShare.get(shareId) || 0;
+
+          if (shareFlow > bestFlow) {
+            bestFlow = shareFlow;
+            bestShareId = shareId;
+          }
+        });
+
+        return bestShareId;
+      };
+
+      const resolvedShareByForwardId = new Map<number, number>();
+
+      forwardsData.forEach((forward) => {
+        const shareId = resolveShareIdForForward(forward);
+
+        if (shareId) {
+          resolvedShareByForwardId.set(forward.id, shareId);
+        }
+      });
+
       const forwardCountByShare = new Map<number, number>();
 
       forwardsData.forEach((forward) => {
-        const shareId = parseShareIdFromTunnelName(forward.tunnelName || "");
+        const shareId = resolvedShareByForwardId.get(forward.id) || null;
 
         if (!shareId || !flowByShare.has(shareId)) {
           return;
@@ -322,7 +389,7 @@ export default function ForwardPage() {
       });
 
       return forwardsData.map((forward) => {
-        const shareId = parseShareIdFromTunnelName(forward.tunnelName || "");
+        const shareId = resolvedShareByForwardId.get(forward.id) || null;
 
         if (!shareId) {
           return { ...forward, federationShareFlow: undefined };
