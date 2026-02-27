@@ -214,7 +214,7 @@ func (GroupPermissionGrant) TableName() string { return "group_permission_grant"
 type ViteConfig struct {
 	ID    int64  `gorm:"primaryKey;autoIncrement" json:"id"`
 	Name  string `gorm:"type:varchar(200);not null;uniqueIndex" json:"name"`
-	Value string `gorm:"type:varchar(200);not null" json:"value"`
+	Value string `gorm:"type:text;not null" json:"value"`
 	Time  int64  `gorm:"not null" json:"time"`
 }
 

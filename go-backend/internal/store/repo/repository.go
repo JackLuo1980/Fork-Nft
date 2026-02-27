@@ -2482,9 +2482,10 @@ func (r *Repository) GetUserTunnelByID(id int64) (*model.UserTunnel, error) {
 
 // ─── Migration ───────────────────────────────────────────────────────
 
-const currentSchemaVersion = 2
+const currentSchemaVersion = 3
 
 var ensurePostgresIDDefaultsFn = ensurePostgresIDDefaults
+var migrateViteConfigValueColumnTypeFn = migrateViteConfigValueColumnType
 
 func getSchemaVersion(db *gorm.DB) int {
 	var v model.SchemaVersion
@@ -2536,7 +2537,52 @@ func migrateSchema(db *gorm.DB) error {
 		return err
 	}
 
+	if ver < 3 {
+		if err := migrateViteConfigValueColumnTypeFn(db); err != nil {
+			return err
+		}
+	}
+
 	setSchemaVersion(db, currentSchemaVersion)
+	return nil
+}
+
+func migrateViteConfigValueColumnType(db *gorm.DB) error {
+	if db == nil {
+		return errors.New("nil db")
+	}
+
+	if !db.Migrator().HasTable(&model.ViteConfig{}) {
+		return nil
+	}
+
+	if db.Dialector.Name() != "postgres" {
+		return nil
+	}
+
+	type columnRow struct {
+		DataType string `gorm:"column:data_type"`
+	}
+
+	var row columnRow
+	if err := db.Raw(
+		`SELECT data_type FROM information_schema.columns
+		 WHERE table_schema = current_schema()
+		   AND table_name = ?
+		   AND column_name = ?`,
+		"vite_config", "value",
+	).Scan(&row).Error; err != nil {
+		return fmt.Errorf("inspect vite_config.value type: %w", err)
+	}
+
+	if strings.EqualFold(row.DataType, "text") {
+		return nil
+	}
+
+	if err := db.Exec(`ALTER TABLE "vite_config" ALTER COLUMN "value" TYPE TEXT`).Error; err != nil {
+		return fmt.Errorf("alter vite_config.value to text: %w", err)
+	}
+
 	return nil
 }
 

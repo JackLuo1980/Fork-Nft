@@ -30,7 +30,7 @@ import { SettingsIcon } from "@/components/icons";
 import { isAdmin } from "@/utils/auth";
 import {
   getCachedConfigs,
-  clearConfigCache,
+  configCache,
   updateSiteConfig,
 } from "@/config/site";
 import {
@@ -38,6 +38,11 @@ import {
   getUpdateReleaseChannel,
   setUpdateReleaseChannel,
 } from "@/utils/version-update";
+import {
+  convertBrandAssetToPngDataURL,
+  isPngDataURL,
+  type BrandAssetKind,
+} from "@/utils/brand-asset";
 
 // 简单的保存图标组件
 const SaveIcon = ({ className }: { className?: string }) => (
@@ -74,6 +79,12 @@ type BrandPreviewKey = (typeof BRAND_PREVIEW_KEYS)[number];
 const isBrandPreviewKey = (key: string): key is BrandPreviewKey =>
   BRAND_PREVIEW_KEYS.includes(key as BrandPreviewKey);
 
+const BRAND_FILE_ACCEPT = "image/png,image/jpeg,image/webp,image/svg+xml";
+
+const toBrandAssetKind = (key: BrandPreviewKey): BrandAssetKind => {
+  return key === "app_logo" ? "logo" : "favicon";
+};
+
 // 网站配置项定义
 const CONFIG_ITEMS: ConfigItem[] = [
   {
@@ -101,17 +112,15 @@ const CONFIG_ITEMS: ConfigItem[] = [
   {
     key: "app_logo",
     label: "网页角标 Logo",
-    placeholder: "请输入 Logo 图片 URL",
     description:
-      "用于页面左上角导航角标，支持站内路径（如 /logo.png）或完整图片 URL",
+      "用于页面左上角导航角标，上传后会自动转换为 PNG 并持久化保存",
     type: "input",
   },
   {
     key: "app_favicon",
     label: "浏览器缩略图标",
-    placeholder: "请输入 Favicon 图片 URL",
     description:
-      "用于浏览器标签页图标，支持站内路径（如 /favicon.ico）或完整图片 URL",
+      "用于浏览器标签页图标，上传后会自动转换为 PNG 并持久化保存",
     type: "input",
   },
   {
@@ -204,7 +213,9 @@ export default function ConfigPage() {
   const [exportSelectorOpen, setExportSelectorOpen] = useState(false);
   const [importSelectorOpen, setImportSelectorOpen] = useState(false);
   const [importFileName, setImportFileName] = useState("");
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const backupFileInputRef = useRef<HTMLInputElement>(null);
+  const logoFileInputRef = useRef<HTMLInputElement>(null);
+  const faviconFileInputRef = useRef<HTMLInputElement>(null);
 
   const [announcement, setAnnouncement] = useState<AnnouncementData>({
     content: "",
@@ -216,6 +227,9 @@ export default function ConfigPage() {
     getUpdateReleaseChannel(),
   );
   const [previewLoadFailed, setPreviewLoadFailed] = useState<
+    Partial<Record<BrandPreviewKey, boolean>>
+  >({});
+  const [brandUploading, setBrandUploading] = useState<
     Partial<Record<BrandPreviewKey, boolean>>
   >({});
 
@@ -335,18 +349,30 @@ export default function ConfigPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const response = await updateConfigs(configs);
+      const changedKeys = Object.keys(configs).filter(
+        (key) => configs[key] !== originalConfigs[key],
+      );
+
+      if (changedKeys.length === 0) {
+        setHasChanges(false);
+
+        return;
+      }
+
+      const changedPayload: Record<string, string> = {};
+
+      changedKeys.forEach((key) => {
+        changedPayload[key] = configs[key] || "";
+      });
+
+      const response = await updateConfigs(changedPayload);
 
       if (response.code === 0) {
         toast.success("配置保存成功");
 
-        // 清除所有配置缓存，强制下次重新获取
-        clearConfigCache();
-
-        // 获取变更的配置项
-        const changedKeys = Object.keys(configs).filter(
-          (key) => configs[key] !== originalConfigs[key],
-        );
+        Object.entries(configs).forEach(([key, value]) => {
+          configCache.set(key, value);
+        });
 
         setOriginalConfigs({ ...configs });
         setHasChanges(false);
@@ -356,7 +382,7 @@ export default function ConfigPage() {
             ["app_name", "app_logo", "app_favicon"].includes(key),
           )
         ) {
-          await updateSiteConfig();
+          await updateSiteConfig(configs);
         }
 
         // 触发配置更新事件，通知其他组件
@@ -382,6 +408,54 @@ export default function ConfigPage() {
     }
 
     return configs[item.dependsOn] === item.dependsValue;
+  };
+
+  const getBrandInputRef = (key: BrandPreviewKey) => {
+    return key === "app_logo" ? logoFileInputRef : faviconFileInputRef;
+  };
+
+  const triggerBrandFilePicker = (key: BrandPreviewKey) => {
+    if (brandUploading[key]) {
+      return;
+    }
+
+    getBrandInputRef(key).current?.click();
+  };
+
+  const clearBrandAsset = (key: BrandPreviewKey) => {
+    handleConfigChange(key, "");
+    setPreviewLoadFailed((prev) => ({ ...prev, [key]: false }));
+  };
+
+  const handleBrandFileChange = async (
+    key: BrandPreviewKey,
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    setBrandUploading((prev) => ({ ...prev, [key]: true }));
+
+    try {
+      const pngDataURL = await convertBrandAssetToPngDataURL(
+        file,
+        toBrandAssetKind(key),
+      );
+
+      handleConfigChange(key, pngDataURL);
+      toast.success(key === "app_logo" ? "Logo 上传成功" : "Favicon 上传成功");
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "图片处理失败，请重试";
+
+      toast.error(message);
+    } finally {
+      setBrandUploading((prev) => ({ ...prev, [key]: false }));
+      event.target.value = "";
+    }
   };
 
   const renderBrandPreview = (key: BrandPreviewKey) => {
@@ -443,15 +517,80 @@ export default function ConfigPage() {
 
         {previewUrl.length === 0 ? (
           <p className="mt-2 text-xs text-default-500">
-            输入图片 URL 后会实时显示预览
+            上传图片后会实时显示预览
           </p>
         ) : null}
 
         {previewUrl.length > 0 && failed ? (
-          <p className="mt-2 text-xs text-danger">
-            图片加载失败，请检查图片地址是否可访问
+          <p className="mt-2 text-xs text-danger">图片加载失败，请重新上传</p>
+        ) : null}
+
+        {previewUrl.length > 0 && !isPngDataURL(previewUrl) ? (
+          <p className="mt-2 text-xs text-warning-600 dark:text-warning-400">
+            当前是旧版 URL 配置，建议重新上传图片以启用无闪烁加载
           </p>
         ) : null}
+      </div>
+    );
+  };
+
+  const renderBrandAssetUploader = (key: BrandPreviewKey, isChanged: boolean) => {
+    const value = (configs[key] || "").trim();
+    const uploading = brandUploading[key] === true;
+    const isLogo = key === "app_logo";
+
+    return (
+      <div
+        className={`rounded-lg border p-3 ${
+          isChanged
+            ? "border-warning-300"
+            : "border-default-200 dark:border-default-100/30"
+        }`}
+      >
+        <input
+          accept={BRAND_FILE_ACCEPT}
+          className="hidden"
+          ref={getBrandInputRef(key)}
+          type="file"
+          onChange={(event) => {
+            void handleBrandFileChange(key, event);
+          }}
+        />
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            color="primary"
+            isLoading={uploading}
+            size="sm"
+            variant="flat"
+            onPress={() => triggerBrandFilePicker(key)}
+          >
+            {value.length > 0
+              ? isLogo
+                ? "替换 Logo"
+                : "替换 Favicon"
+              : isLogo
+                ? "上传 Logo"
+                : "上传 Favicon"}
+          </Button>
+          <Button
+            isDisabled={value.length === 0 || uploading}
+            size="sm"
+            variant="light"
+            onPress={() => clearBrandAsset(key)}
+          >
+            清除
+          </Button>
+          <span className="text-xs text-default-500">仅支持图片文件，自动转换为 PNG</span>
+        </div>
+
+        <p className="mt-2 text-xs text-default-500">
+          {isLogo
+            ? "建议上传方形图片，系统会统一转换为 96x96 PNG"
+            : "建议上传方形图片，系统会统一转换为 64x64 PNG"}
+        </p>
+
+        {renderBrandPreview(key)}
       </div>
     );
   };
@@ -463,23 +602,24 @@ export default function ConfigPage() {
 
     switch (item.type) {
       case "input":
+        if (isBrandPreviewKey(item.key)) {
+          return renderBrandAssetUploader(item.key, isChanged);
+        }
+
         return (
-          <>
-            <Input
-              classNames={{
-                input: "text-sm",
-                inputWrapper: isChanged
-                  ? "border-warning-300 data-[hover=true]:border-warning-400"
-                  : "",
-              }}
-              placeholder={item.placeholder}
-              size="md"
-              value={configs[item.key] || ""}
-              variant="bordered"
-              onChange={(e) => handleConfigChange(item.key, e.target.value)}
-            />
-            {isBrandPreviewKey(item.key) ? renderBrandPreview(item.key) : null}
-          </>
+          <Input
+            classNames={{
+              input: "text-sm",
+              inputWrapper: isChanged
+                ? "border-warning-300 data-[hover=true]:border-warning-400"
+                : "",
+            }}
+            placeholder={item.placeholder}
+            size="md"
+            value={configs[item.key] || ""}
+            variant="bordered"
+            onChange={(e) => handleConfigChange(item.key, e.target.value)}
+          />
         );
 
       case "switch":
@@ -560,7 +700,7 @@ export default function ConfigPage() {
     }
 
     setImportSelectorOpen(false);
-    requestAnimationFrame(() => fileInputRef.current?.click());
+    requestAnimationFrame(() => backupFileInputRef.current?.click());
   };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -597,8 +737,8 @@ export default function ConfigPage() {
       toast.error("导入失败，请检查文件格式");
     } finally {
       setImporting(false);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
+      if (backupFileInputRef.current) {
+        backupFileInputRef.current.value = "";
       }
     }
   };
@@ -940,7 +1080,7 @@ export default function ConfigPage() {
             </p>
 
             <input
-              ref={fileInputRef}
+              ref={backupFileInputRef}
               accept=".json"
               className="hidden"
               type="file"

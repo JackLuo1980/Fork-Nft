@@ -2,7 +2,6 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/png" href="/pwa-192x192.png" />
     <meta name="theme-color" content="#2563eb" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
@@ -13,6 +12,47 @@
     <script>
       // 防止暗黑模式闪烁：在页面加载前立即应用系统主题
       (function() {
+        // 页面最早阶段应用缓存 favicon，避免默认图标闪烁
+        const defaultFavicon = '/favicon.ico';
+        let cachedFavicon = '';
+
+        try {
+          cachedFavicon = localStorage.getItem('vite_config_app_favicon') || '';
+        } catch (_) {
+          cachedFavicon = '';
+        }
+
+        const faviconHref = cachedFavicon.trim() || defaultFavicon;
+        let faviconLink = document.head.querySelector('link#app-favicon');
+
+        if (!faviconLink) {
+          faviconLink = document.createElement('link');
+          faviconLink.id = 'app-favicon';
+          faviconLink.rel = 'icon';
+          document.head.appendChild(faviconLink);
+        }
+
+        faviconLink.href = faviconHref;
+        if (faviconHref.startsWith('data:image/png')) {
+          faviconLink.type = 'image/png';
+        } else {
+          faviconLink.removeAttribute('type');
+        }
+
+        let shortcutIconLink = document.head.querySelector('link[rel="shortcut icon"]');
+        if (!shortcutIconLink) {
+          shortcutIconLink = document.createElement('link');
+          shortcutIconLink.rel = 'shortcut icon';
+          document.head.appendChild(shortcutIconLink);
+        }
+
+        shortcutIconLink.href = faviconHref;
+        if (faviconHref.startsWith('data:image/png')) {
+          shortcutIconLink.type = 'image/png';
+        } else {
+          shortcutIconLink.removeAttribute('type');
+        }
+
         // 立即检测系统主题并应用
         const isDarkMode = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
         
@@ -156,7 +196,6 @@
       content="viewport-fit=cover, width=device-width, initial-scale=1.0, user-scalable=no"
       name="viewport"
     />
-    <link href="/favicon.ico" rel="icon" />
   </head>
   <body>
     <div id="root"></div>

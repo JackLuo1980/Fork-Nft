@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -71,6 +72,11 @@ type flowItem struct {
 	U int64  `json:"u"`
 	D int64  `json:"d"`
 }
+
+const (
+	pngDataURLPrefix          = "data:image/png;base64,"
+	maxBrandAssetDataURLBytes = 1024 * 1024
+)
 
 func New(repo *repo.Repository, jwtSecret string) *Handler {
 	h := &Handler{
@@ -747,7 +753,14 @@ func (h *Handler) updateConfigs(w http.ResponseWriter, r *http.Request) {
 		if key == "" {
 			continue
 		}
-		if err := h.repo.UpsertConfig(key, v, now); err != nil {
+
+		value, err := normalizeAndValidateConfigValue(key, v)
+		if err != nil {
+			response.WriteJSON(w, response.ErrDefault(err.Error()))
+			return
+		}
+
+		if err := h.repo.UpsertConfig(key, value, now); err != nil {
 			response.WriteJSON(w, response.Err(-2, err.Error()))
 			return
 		}
@@ -767,21 +780,60 @@ func (h *Handler) updateSingleConfig(w http.ResponseWriter, r *http.Request) {
 		response.WriteJSON(w, response.ErrDefault("配置名称不能为空"))
 		return
 	}
-	if strings.TrimSpace(req.Name) == "" {
+	name := strings.TrimSpace(req.Name)
+	if name == "" {
 		response.WriteJSON(w, response.ErrDefault("配置名称不能为空"))
 		return
 	}
-	if strings.TrimSpace(req.Value) == "" {
+
+	value, err := normalizeAndValidateConfigValue(name, req.Value)
+	if err != nil {
+		response.WriteJSON(w, response.ErrDefault(err.Error()))
+		return
+	}
+
+	if value == "" && name != "app_logo" && name != "app_favicon" {
 		response.WriteJSON(w, response.ErrDefault("配置值不能为空"))
 		return
 	}
 
-	if err := h.repo.UpsertConfig(strings.TrimSpace(req.Name), req.Value, time.Now().UnixMilli()); err != nil {
+	if err := h.repo.UpsertConfig(name, value, time.Now().UnixMilli()); err != nil {
 		response.WriteJSON(w, response.Err(-2, err.Error()))
 		return
 	}
 
 	response.WriteJSON(w, response.OKEmpty())
+}
+
+func normalizeAndValidateConfigValue(key, value string) (string, error) {
+	switch strings.TrimSpace(key) {
+	case "app_logo", "app_favicon":
+		normalized := strings.TrimSpace(value)
+		if normalized == "" {
+			return "", nil
+		}
+
+		if !strings.HasPrefix(normalized, pngDataURLPrefix) {
+			return "", fmt.Errorf("品牌图片必须通过上传生成 PNG 数据")
+		}
+
+		if len(normalized) > maxBrandAssetDataURLBytes {
+			return "", fmt.Errorf("品牌图片过大，请上传更小图片")
+		}
+
+		payload := strings.TrimSpace(strings.TrimPrefix(normalized, pngDataURLPrefix))
+		if payload == "" {
+			return "", fmt.Errorf("品牌图片数据不能为空")
+		}
+
+		if _, err := base64.StdEncoding.DecodeString(payload); err != nil {
+			return "", fmt.Errorf("品牌图片数据格式无效")
+		}
+
+		return pngDataURLPrefix + payload, nil
+	default:
+		return value, nil
+	}
 }
 
 func (h *Handler) userPackage(w http.ResponseWriter, r *http.Request) {

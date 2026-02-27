@@ -6,6 +6,8 @@ export type SiteConfig = typeof siteConfig;
 const CACHE_PREFIX = "vite_config_";
 const VERSION = import.meta.env.VITE_APP_VERSION || "dev";
 const APP_VERSION = "1.0.3";
+const DEFAULT_FAVICON = "/favicon.ico";
+const FAVICON_LINK_ID = "app-favicon";
 const GITHUB_REPO =
   import.meta.env.VITE_GITHUB_REPO || "https://github.com/Sagit-chu/flux-panel";
 
@@ -95,7 +97,11 @@ export const getCachedConfig = async (key: string): Promise<string | null> => {
 
   const response = await getConfigByName(key);
 
-  if (response.code === 0 && response.data?.value) {
+  if (
+    response.code === 0 &&
+    response.data &&
+    typeof response.data.value === "string"
+  ) {
     const value = response.data.value;
 
     configCache.set(key, value);
@@ -151,34 +157,62 @@ const updateDocumentFavicon = (faviconUrl: string) => {
     return;
   }
 
-  const normalized = faviconUrl.trim() || "/favicon.ico";
-  const iconLinks = Array.from(
-    document.head.querySelectorAll<HTMLLinkElement>(
-      'link[rel="icon"], link[rel="shortcut icon"]',
-    ),
+  const normalized = faviconUrl.trim() || DEFAULT_FAVICON;
+
+  let iconLink = document.head.querySelector<HTMLLinkElement>(
+    `link#${FAVICON_LINK_ID}`,
   );
 
-  if (iconLinks.length === 0) {
-    const link = document.createElement("link");
-
-    link.rel = "icon";
-    link.href = normalized;
-    document.head.appendChild(link);
-
-    return;
+  if (!iconLink) {
+    iconLink = document.createElement("link");
+    iconLink.id = FAVICON_LINK_ID;
+    iconLink.rel = "icon";
+    document.head.appendChild(iconLink);
   }
 
-  iconLinks.forEach((link) => {
-    link.href = normalized;
-  });
+  iconLink.rel = "icon";
+  iconLink.href = normalized;
+  if (normalized.startsWith("data:image/png")) {
+    iconLink.type = "image/png";
+  } else {
+    iconLink.removeAttribute("type");
+  }
+
+  let shortcutIconLink = document.head.querySelector<HTMLLinkElement>(
+    'link[rel="shortcut icon"]',
+  );
+
+  if (!shortcutIconLink) {
+    shortcutIconLink = document.createElement("link");
+    shortcutIconLink.rel = "shortcut icon";
+    document.head.appendChild(shortcutIconLink);
+  }
+
+  shortcutIconLink.href = normalized;
+  if (normalized.startsWith("data:image/png")) {
+    shortcutIconLink.type = "image/png";
+  } else {
+    shortcutIconLink.removeAttribute("type");
+  }
+
+  const duplicatedIcons = Array.from(
+    document.head.querySelectorAll<HTMLLinkElement>('link[rel="icon"]'),
+  ).filter((link) => link !== iconLink);
+
+  duplicatedIcons.forEach((link) => link.remove());
 };
 
 // 动态更新网站配置
-export const updateSiteConfig = async () => {
-  const configMap = await getCachedConfigs();
-  const appName = (configMap.app_name || "").trim();
-  const appLogo = (configMap.app_logo || "").trim();
-  const appFavicon = (configMap.app_favicon || "").trim();
+export const updateSiteConfig = async (configMap?: Record<string, string>) => {
+  const resolvedConfigMap = configMap ?? (await getCachedConfigs());
+
+  Object.entries(resolvedConfigMap).forEach(([key, value]) => {
+    configCache.set(key, String(value));
+  });
+
+  const appName = (resolvedConfigMap.app_name || "").trim();
+  const appLogo = (resolvedConfigMap.app_logo || "").trim();
+  const appFavicon = (resolvedConfigMap.app_favicon || "").trim();
 
   if (appName && appName !== siteConfig.name) {
     siteConfig.name = appName;
@@ -186,14 +220,13 @@ export const updateSiteConfig = async () => {
 
   siteConfig.app_logo = appLogo;
   siteConfig.app_favicon = appFavicon;
-  document.title = siteConfig.name;
+  if (typeof document !== "undefined") {
+    document.title = siteConfig.name;
+  }
   updateDocumentFavicon(siteConfig.app_favicon);
 };
 
-// 清除配置缓存的工具函数
-// 缓存清除时机：
-// 1. 配置更新时：调用此函数清除所有缓存
-// 2. 退出登录时：safeLogout()中的localStorage.clear()会自动清除
+// 清除配置缓存的工具函数（用于需要强制重拉配置的场景）
 export const clearConfigCache = (keys?: string[]) => {
   if (keys && keys.length > 0) {
     // 删除指定的配置缓存
@@ -206,8 +239,13 @@ export const clearConfigCache = (keys?: string[]) => {
 
 // 在页面加载时异步更新配置（如果有更新的话）
 if (typeof window !== "undefined") {
+  if (typeof document !== "undefined") {
+    document.title = siteConfig.name;
+  }
+  updateDocumentFavicon(siteConfig.app_favicon);
+
   // 延迟执行，避免阻塞初始渲染
   setTimeout(() => {
-    updateSiteConfig();
-  }, 200);
+    void updateSiteConfig();
+  }, 50);
 }
