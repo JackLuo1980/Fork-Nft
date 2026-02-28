@@ -624,42 +624,6 @@ func waitNodeStatus(t *testing.T, r *repo.Repository, nodeID int64, expectedStat
 	}
 }
 
-func valueAsInt(v interface{}) int {
-	switch n := v.(type) {
-	case float64:
-		return int(n)
-	case int:
-		return n
-	case int64:
-		return int(n)
-	default:
-		return 0
-	}
-}
-
-func valueAsString(v interface{}) string {
-	s, _ := v.(string)
-	return s
-}
-
-func valueAsBool(v interface{}) bool {
-	switch b := v.(type) {
-	case bool:
-		return b
-	case float64:
-		return b != 0
-	case int:
-		return b != 0
-	case int64:
-		return b != 0
-	case string:
-		s := strings.TrimSpace(strings.ToLower(b))
-		return s == "1" || s == "t" || s == "true" || s == "yes" || s == "y"
-	default:
-		return false
-	}
-}
-
 func TestFederationRuntimeCommandPortRangeEnforcement(t *testing.T) {
 	providerSecret := "provider-portrange-jwt"
 	providerRouter, providerRepo := setupContractRouter(t, providerSecret)

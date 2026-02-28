@@ -2,6 +2,8 @@ package contract_test
 
 import (
 	"database/sql"
+	"strconv"
+	"strings"
 	"testing"
 
 	"go-backend/internal/store/repo"
@@ -116,4 +118,44 @@ func tryQueryInt(t *testing.T, r *repo.Repository, query string, args ...interfa
 		return 0, err
 	}
 	return v, nil
+}
+
+func valueAsInt(v interface{}) int {
+	switch n := v.(type) {
+	case float64:
+		return int(n)
+	case int:
+		return n
+	case int64:
+		return int(n)
+	default:
+		return 0
+	}
+}
+
+func valueAsString(v interface{}) string {
+	s, _ := v.(string)
+	return s
+}
+
+func valueAsBool(v interface{}) bool {
+	switch b := v.(type) {
+	case bool:
+		return b
+	case float64:
+		return b != 0
+	case int:
+		return b != 0
+	case int64:
+		return b != 0
+	case string:
+		s := strings.TrimSpace(strings.ToLower(b))
+		return s == "1" || s == "t" || s == "true" || s == "yes" || s == "y"
+	default:
+		return false
+	}
+}
+
+func jsonInt64(v int64) string {
+	return strconv.FormatInt(v, 10)
 }

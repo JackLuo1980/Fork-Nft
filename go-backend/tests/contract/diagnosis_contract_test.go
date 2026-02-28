@@ -1,11 +1,10 @@
-package contract
+package contract_test
 
 import (
 	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -13,15 +12,12 @@ import (
 	"time"
 
 	"go-backend/internal/auth"
-	httpserver "go-backend/internal/http"
-	"go-backend/internal/http/handler"
 	"go-backend/internal/http/response"
-	"go-backend/internal/store/repo"
 )
 
 func TestDiagnosisChainCoverageContracts(t *testing.T) {
 	secret := "contract-jwt-secret"
-	router, r := setupDiagnosisContractRouter(t, secret)
+	router, r := setupContractRouter(t, secret)
 	now := time.Now().UnixMilli()
 
 	if err := r.DB().Exec(`
@@ -195,7 +191,7 @@ func TestDiagnosisChainCoverageContracts(t *testing.T) {
 
 func TestForwardDiagnosisRespectsTunnelIPPreferenceContract(t *testing.T) {
 	secret := "contract-jwt-secret"
-	router, r := setupDiagnosisContractRouter(t, secret)
+	router, r := setupContractRouter(t, secret)
 	now := time.Now().UnixMilli()
 
 	if err := r.DB().Exec(`
@@ -315,7 +311,7 @@ func TestForwardDiagnosisRespectsTunnelIPPreferenceContract(t *testing.T) {
 
 func TestDiagnosisUsesFederationRuntimeForRemoteNodes(t *testing.T) {
 	secret := "contract-jwt-secret"
-	router, r := setupDiagnosisContractRouter(t, secret)
+	router, r := setupContractRouter(t, secret)
 	now := time.Now().UnixMilli()
 
 	remoteToken := "remote-diagnose-token"
@@ -464,55 +460,4 @@ func TestDiagnosisUsesFederationRuntimeForRemoteNodes(t *testing.T) {
 	if atomic.LoadInt32(&remoteDiagnoseCalls) == 0 {
 		t.Fatalf("expected federation runtime diagnose endpoint to be called")
 	}
-}
-
-func valueAsInt(v interface{}) int {
-	switch n := v.(type) {
-	case float64:
-		return int(n)
-	case int:
-		return n
-	case int64:
-		return int(n)
-	default:
-		return 0
-	}
-}
-
-func valueAsString(v interface{}) string {
-	s, _ := v.(string)
-	return s
-}
-
-func valueAsBool(v interface{}) bool {
-	switch b := v.(type) {
-	case bool:
-		return b
-	case float64:
-		return b != 0
-	case int:
-		return b != 0
-	case int64:
-		return b != 0
-	case string:
-		s := strings.TrimSpace(strings.ToLower(b))
-		return s == "1" || s == "t" || s == "true" || s == "yes" || s == "y"
-	default:
-		return false
-	}
-}
-
-func setupDiagnosisContractRouter(t *testing.T, jwtSecret string) (http.Handler, *repo.Repository) {
-	t.Helper()
-	dbPath := filepath.Join(t.TempDir(), "diagnosis-contract.db")
-	r, err := repo.Open(dbPath)
-	if err != nil {
-		t.Fatalf("open sqlite: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = r.Close()
-	})
-
-	h := handler.New(r, jwtSecret)
-	return httpserver.NewRouter(h, jwtSecret), r
 }

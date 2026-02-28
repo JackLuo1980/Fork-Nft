@@ -1,4 +1,4 @@
-package contract
+package contract_test
 
 import (
 	"encoding/json"
@@ -13,7 +13,7 @@ import (
 
 func TestUserTunnelVisibleListContracts(t *testing.T) {
 	secret := "contract-jwt-secret"
-	router, repo := setupDiagnosisContractRouter(t, secret)
+	router, repo := setupContractRouter(t, secret)
 	now := time.Now().UnixMilli()
 
 	if err := repo.DB().Exec(`
@@ -126,8 +126,11 @@ func collectTunnelIDs(t *testing.T, data interface{}) map[int64]bool {
 		if !ok {
 			t.Fatalf("expected object item, got %T", item)
 		}
-		id := int64(obj["id"].(float64))
-		ids[id] = true
+		idFloat, ok := obj["id"].(float64)
+		if !ok {
+			t.Fatalf("expected id to be float64, got %T", obj["id"])
+		}
+		ids[int64(idFloat)] = true
 	}
 	return ids
 }

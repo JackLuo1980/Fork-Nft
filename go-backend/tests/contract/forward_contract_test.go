@@ -109,7 +109,11 @@ func TestForwardOwnershipAndScopeContracts(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected object item, got %T", arr[0])
 		}
-		if got := int64(item["id"].(float64)); got != userForwardID {
+		idFloat, ok := item["id"].(float64)
+		if !ok {
+			t.Fatalf("expected id to be float64, got %T", item["id"])
+		}
+		if got := int64(idFloat); got != userForwardID {
 			t.Fatalf("expected forward id %d, got %d", userForwardID, got)
 		}
 	})
@@ -144,7 +148,11 @@ func TestForwardOwnershipAndScopeContracts(t *testing.T) {
 		if _, ok := first["message"]; !ok {
 			t.Fatalf("expected message field in diagnosis result")
 		}
-		if got := int(first["fromChainType"].(float64)); got != 1 {
+		fromChainTypeFloat, ok := first["fromChainType"].(float64)
+		if !ok {
+			t.Fatalf("expected fromChainType to be float64, got %T", first["fromChainType"])
+		}
+		if got := int(fromChainTypeFloat); got != 1 {
 			t.Fatalf("expected fromChainType=1, got %d", got)
 		}
 	})
