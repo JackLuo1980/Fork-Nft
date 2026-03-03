@@ -2643,7 +2643,7 @@ func buildTunnelChainServiceConfig(tunnelID int64, chainNode tunnelRuntimeNode, 
 	}
 	service := map[string]interface{}{
 		"name":    fmt.Sprintf("%d_tls", tunnelID),
-		"addr":    fmt.Sprintf("%s:%d", node.TCPListenAddr, chainNode.Port),
+		"addr":    processServerAddress(fmt.Sprintf("%s:%d", defaultString(strings.TrimSpace(chainNode.ConnectIP), node.TCPListenAddr), chainNode.Port)),
 		"handler": handlerCfg,
 		"listener": map[string]interface{}{
 			"type": protocol,

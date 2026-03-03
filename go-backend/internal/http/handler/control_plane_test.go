@@ -65,3 +65,35 @@ func TestIsAlreadyExistsMessage(t *testing.T) {
 		t.Fatalf("address already in use must not be treated as already exists")
 	}
 }
+
+func TestBuildForwardServiceConfigs_UsesBindIPForListen(t *testing.T) {
+	forward := &forwardRecord{RemoteAddr: "1.2.3.4:80", Strategy: "fifo", TunnelID: 7}
+	node := &nodeRecord{TCPListenAddr: "[::]", UDPListenAddr: "[::]"}
+	services := buildForwardServiceConfigs("1_2_0", forward, nil, node, 22000, "10.9.8.7", nil, false)
+	if len(services) != 2 {
+		t.Fatalf("expected 2 services, got %d", len(services))
+	}
+	for _, svc := range services {
+		addr, _ := svc["addr"].(string)
+		if addr != "10.9.8.7:22000" {
+			t.Fatalf("expected bind IP address 10.9.8.7:22000, got %q", addr)
+		}
+	}
+}
+
+func TestBuildForwardServiceConfigs_DefaultListenAddrWhenBindIPEmpty(t *testing.T) {
+	forward := &forwardRecord{RemoteAddr: "1.2.3.4:80", Strategy: "fifo", TunnelID: 7}
+	node := &nodeRecord{TCPListenAddr: "0.0.0.0", UDPListenAddr: "[::]"}
+	services := buildForwardServiceConfigs("1_2_0", forward, nil, node, 22001, "", nil, false)
+	if len(services) != 2 {
+		t.Fatalf("expected 2 services, got %d", len(services))
+	}
+	tcpAddr, _ := services[0]["addr"].(string)
+	udpAddr, _ := services[1]["addr"].(string)
+	if tcpAddr != "0.0.0.0:22001" {
+		t.Fatalf("expected tcp addr 0.0.0.0:22001, got %q", tcpAddr)
+	}
+	if udpAddr != "[::]:22001" {
+		t.Fatalf("expected udp addr [::]:22001, got %q", udpAddr)
+	}
+}

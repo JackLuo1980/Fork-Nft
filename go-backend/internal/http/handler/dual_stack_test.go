@@ -30,6 +30,32 @@ func TestSelectTunnelDialHost_ConnectIpPriority(t *testing.T) {
 	}
 }
 
+func TestBuildTunnelChainServiceConfig_UsesConnectIPForListen(t *testing.T) {
+	node := &nodeRecord{TCPListenAddr: "[::]"}
+	chain := tunnelRuntimeNode{Protocol: "tls", Port: 21000, ConnectIP: "2001:db8::88"}
+	services := buildTunnelChainServiceConfig(99, chain, node)
+	if len(services) != 1 {
+		t.Fatalf("expected 1 service, got %d", len(services))
+	}
+	addr, _ := services[0]["addr"].(string)
+	if addr != "[2001:db8::88]:21000" {
+		t.Fatalf("expected connectIp listen [2001:db8::88]:21000, got %q", addr)
+	}
+}
+
+func TestBuildTunnelChainServiceConfig_DefaultListenAddrWhenConnectIPEmpty(t *testing.T) {
+	node := &nodeRecord{TCPListenAddr: "[::]"}
+	chain := tunnelRuntimeNode{Protocol: "tls", Port: 21001}
+	services := buildTunnelChainServiceConfig(99, chain, node)
+	if len(services) != 1 {
+		t.Fatalf("expected 1 service, got %d", len(services))
+	}
+	addr, _ := services[0]["addr"].(string)
+	if addr != "[::]:21001" {
+		t.Fatalf("expected default listen [::]:21001, got %q", addr)
+	}
+}
+
 func TestNodeSupportsV6_Nil(t *testing.T) {
 	if nodeSupportsV6(nil) {
 		t.Fatal("nil node must not support v6")

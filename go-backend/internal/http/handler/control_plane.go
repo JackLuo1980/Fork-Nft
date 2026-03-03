@@ -281,7 +281,7 @@ func (h *Handler) syncForwardServices(forward *forwardRecord, method string, all
 		if err != nil {
 			return err
 		}
-		services := buildForwardServiceConfigs(serviceBase, forward, tunnel, node, fp.Port, limiterID, tunnelTLSProtocol)
+		services := buildForwardServiceConfigs(serviceBase, forward, tunnel, node, fp.Port, strings.TrimSpace(fp.InIP), limiterID, tunnelTLSProtocol)
 		_, err = h.sendNodeCommand(node.ID, method, services, true, false)
 		if err != nil && allowFallbackAdd && method == "UpdateService" {
 			_, err = h.sendNodeCommand(node.ID, "AddService", services, true, false)
@@ -1303,7 +1303,7 @@ func isAlreadyExistsMessage(message string) bool {
 	return strings.Contains(msg, "already exists") || strings.Contains(msg, "已存在")
 }
 
-func buildForwardServiceConfigs(baseName string, forward *forwardRecord, tunnel *tunnelRecord, node *nodeRecord, port int, limiterID *int64, tunnelTLSProtocol bool) []map[string]interface{} {
+func buildForwardServiceConfigs(baseName string, forward *forwardRecord, tunnel *tunnelRecord, node *nodeRecord, port int, bindIP string, limiterID *int64, tunnelTLSProtocol bool) []map[string]interface{} {
 	protocols := []string{"tcp", "udp"}
 	services := make([]map[string]interface{}, 0, 2)
 	targets := splitRemoteTargets(forward.RemoteAddr)
@@ -1317,9 +1317,12 @@ func buildForwardServiceConfigs(baseName string, forward *forwardRecord, tunnel 
 		if protocol == "udp" {
 			listenerAddr = node.UDPListenAddr
 		}
+		if bindIP != "" {
+			listenerAddr = bindIP
+		}
 		service := map[string]interface{}{
 			"name": fmt.Sprintf("%s_%s", baseName, protocol),
-			"addr": fmt.Sprintf("%s:%d", listenerAddr, port),
+			"addr": processServerAddress(fmt.Sprintf("%s:%d", listenerAddr, port)),
 			"handler": map[string]interface{}{
 				"type": protocol,
 			},
