@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 )
@@ -63,6 +64,21 @@ func TestIsAlreadyExistsMessage(t *testing.T) {
 	}
 	if isAlreadyExistsMessage("listen tcp [::]:10001: bind: address already in use") {
 		t.Fatalf("address already in use must not be treated as already exists")
+	}
+}
+
+func TestIsBindAddressInUseError(t *testing.T) {
+	if !isBindAddressInUseError(errors.New("listen tcp [::]:10001: bind: address already in use")) {
+		t.Fatalf("address already in use should be detected")
+	}
+	if !isBindAddressInUseError(errors.New("listen tcp4 13.228.170.187:16765: bind: cannot assign requested address")) {
+		t.Fatalf("cannot assign requested address should be detected")
+	}
+	if isBindAddressInUseError(errors.New("service demo already exists")) {
+		t.Fatalf("already exists should not be treated as bind conflict")
+	}
+	if isBindAddressInUseError(nil) {
+		t.Fatalf("nil error should not be treated as bind conflict")
 	}
 }
 

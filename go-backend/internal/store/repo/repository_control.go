@@ -111,6 +111,25 @@ func (r *Repository) ListForwardPorts(forwardID int64) ([]model.ForwardPortRecor
 	return rows, nil
 }
 
+func (r *Repository) HasOtherForwardOnNodePort(nodeID int64, port int, currentForwardID int64) (bool, error) {
+	if r == nil || r.db == nil {
+		return false, errors.New("repository not initialized")
+	}
+	if nodeID <= 0 || port <= 0 {
+		return false, nil
+	}
+
+	var count int64
+	err := r.db.Model(&model.ForwardPort{}).
+		Where("node_id = ? AND port = ? AND forward_id <> ?", nodeID, port, currentForwardID).
+		Count(&count).Error
+	if err != nil {
+		return false, err
+	}
+
+	return count > 0, nil
+}
+
 func (r *Repository) GetTunnelOutProtocol(tunnelID int64) (string, error) {
 	if r == nil || r.db == nil {
 		return "", errors.New("repository not initialized")

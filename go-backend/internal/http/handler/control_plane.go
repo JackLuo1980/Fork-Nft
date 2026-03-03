@@ -286,9 +286,83 @@ func (h *Handler) syncForwardServices(forward *forwardRecord, method string, all
 		if err != nil && allowFallbackAdd && method == "UpdateService" {
 			_, err = h.sendNodeCommand(node.ID, "AddService", services, true, false)
 		}
+		if err != nil && strings.EqualFold(strings.TrimSpace(method), "UpdateService") && isBindAddressInUseError(err) {
+			err = h.rebindForwardServiceOnSelfOccupiedPort(forward, node, fp.Port, services)
+		}
 		if err != nil {
 			return fmt.Errorf("节点 %s 下发失败: %w", node.Name, err)
 		}
+	}
+	return nil
+}
+
+func (h *Handler) rebindForwardServiceOnSelfOccupiedPort(forward *forwardRecord, node *nodeRecord, port int, services []map[string]interface{}) error {
+	if h == nil || forward == nil || node == nil {
+		return errors.New("invalid self-occupy rebind context")
+	}
+	if port <= 0 {
+		return errors.New("invalid forward port")
+	}
+
+	hasOtherForward, err := h.repo.HasOtherForwardOnNodePort(node.ID, port, forward.ID)
+	if err != nil {
+		return err
+	}
+	if hasOtherForward {
+		return fmt.Errorf("端口 %d 已被其他转发占用", port)
+	}
+
+	if err := h.deleteForwardServicesOnNode(forward, node.ID); err != nil {
+		return err
+	}
+
+	time.Sleep(150 * time.Millisecond)
+
+	_, err = h.sendNodeCommand(node.ID, "AddService", services, true, false)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (h *Handler) deleteForwardServicesOnNode(forward *forwardRecord, nodeID int64) error {
+	if h == nil || forward == nil {
+		return errors.New("invalid forward delete context")
+	}
+
+	userTunnelID, _, _, err := h.resolveUserTunnelAndLimiter(forward.UserID, forward.TunnelID)
+	if err != nil {
+		return err
+	}
+	userTunnelIDs, err := h.listUserTunnelIDs(forward.UserID, forward.TunnelID)
+	if err != nil {
+		return err
+	}
+	allUserTunnelIDs, err := h.listUserTunnelIDsByUser(forward.UserID)
+	if err != nil {
+		return err
+	}
+	candidateTunnelIDs := make([]int64, 0, len(userTunnelIDs)+len(allUserTunnelIDs))
+	candidateTunnelIDs = append(candidateTunnelIDs, userTunnelIDs...)
+	candidateTunnelIDs = append(candidateTunnelIDs, allUserTunnelIDs...)
+	bases := buildForwardServiceBaseCandidates(forward.ID, forward.UserID, userTunnelID, candidateTunnelIDs)
+
+	var lastErr error
+	for _, base := range bases {
+		names := buildForwardControlServiceNames(base, "DeleteService")
+		payload := map[string]interface{}{
+			"services": names,
+		}
+		_, cmdErr := h.sendNodeCommand(nodeID, "DeleteService", payload, false, true)
+		if cmdErr == nil {
+			return nil
+		}
+		lastErr = cmdErr
+	}
+
+	if lastErr != nil {
+		return lastErr
 	}
 	return nil
 }
@@ -1301,6 +1375,20 @@ func isAlreadyExistsMessage(message string) bool {
 		return false
 	}
 	return strings.Contains(msg, "already exists") || strings.Contains(msg, "已存在")
+}
+
+func isBindAddressInUseError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(strings.TrimSpace(err.Error()))
+	if msg == "" {
+		return false
+	}
+	if strings.Contains(msg, "address already in use") {
+		return true
+	}
+	return strings.Contains(msg, "cannot assign requested address")
 }
 
 func buildForwardServiceConfigs(baseName string, forward *forwardRecord, tunnel *tunnelRecord, node *nodeRecord, port int, bindIP string, limiterID *int64, tunnelTLSProtocol bool) []map[string]interface{} {
