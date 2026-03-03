@@ -100,7 +100,7 @@ interface Node {
   rollbackLoading?: boolean;
 }
 
-  interface NodeForm {
+interface NodeForm {
   id: number | null;
   name: string;
   serverHost: string;
@@ -1650,7 +1650,10 @@ export default function NodePage() {
                       value={form.extraIPs}
                       variant="bordered"
                       onChange={(e) =>
-                        setForm((prev) => ({ ...prev, extraIPs: e.target.value }))
+                        setForm((prev) => ({
+                          ...prev,
+                          extraIPs: e.target.value,
+                        }))
                       }
                     />
 

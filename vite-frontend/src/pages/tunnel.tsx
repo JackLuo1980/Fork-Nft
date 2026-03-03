@@ -182,10 +182,14 @@ export default function TunnelPage() {
       return [];
     }
 
-    const optionSets = nodeIds.map((nodeId) => new Set(getNodeIpOptions(nodeId)));
+    const optionSets = nodeIds.map(
+      (nodeId) => new Set(getNodeIpOptions(nodeId)),
+    );
     const base = optionSets[0];
 
-    return Array.from(base).filter((ip) => optionSets.every((set) => set.has(ip)));
+    return Array.from(base).filter((ip) =>
+      optionSets.every((set) => set.has(ip)),
+    );
   };
 
   // 表单状态
@@ -511,6 +515,7 @@ export default function TunnelPage() {
   const handleDiagnose = async (tunnel: Tunnel) => {
     diagnosisAbortRef.current?.abort();
     const abortController = new AbortController();
+
     diagnosisAbortRef.current = abortController;
 
     setCurrentDiagnosisTunnel(tunnel);
@@ -552,6 +557,7 @@ export default function TunnelPage() {
             const startItems = Array.isArray(payload.items)
               ? (payload.items as DiagnosisResult["results"])
               : [];
+
             setDiagnosisResult((prev) => ({
               tunnelName: startTunnelName,
               tunnelType: startTunnelType,
@@ -593,6 +599,7 @@ export default function TunnelPage() {
                   diagnosing: false,
                 });
               }
+
               return {
                 ...base,
                 timestamp: Date.now(),
@@ -628,8 +635,11 @@ export default function TunnelPage() {
 
         if (response.code === 0) {
           const resultData = response.data as DiagnosisResult;
-          const successCount = resultData.results.filter((r) => r.success).length;
+          const successCount = resultData.results.filter(
+            (r) => r.success,
+          ).length;
           const failedCount = resultData.results.length - successCount;
+
           setDiagnosisResult(resultData);
           setDiagnosisProgress({
             total: resultData.results.length,
@@ -1835,7 +1845,9 @@ export default function TunnelPage() {
                                   size="sm"
                                   variant="bordered"
                                   onSelectionChange={(keys) => {
-                                    const selectedKey = Array.from(keys)[0] as string;
+                                    const selectedKey = Array.from(
+                                      keys,
+                                    )[0] as string;
 
                                     updateChainConnectIp(
                                       groupIndex,
@@ -1845,7 +1857,9 @@ export default function TunnelPage() {
                                     );
                                   }}
                                 >
-                                  <SelectItem key="__default__">默认连接IP</SelectItem>
+                                  <SelectItem key="__default__">
+                                    默认连接IP
+                                  </SelectItem>
                                   {groupIpOptions.map((ip) => (
                                     <SelectItem key={ip}>{ip}</SelectItem>
                                   ))}
@@ -2120,8 +2134,9 @@ export default function TunnelPage() {
                         }}
                         description="按出口节点共同可用IP选择，留空使用默认"
                         isDisabled={
-                          (form.outNodeId || []).filter((ct) => ct.nodeId !== -1)
-                            .length === 0 ||
+                          (form.outNodeId || []).filter(
+                            (ct) => ct.nodeId !== -1,
+                          ).length === 0 ||
                           getCommonIpOptions(
                             (form.outNodeId || [])
                               .filter((ct) => ct.nodeId !== -1)
@@ -2130,8 +2145,9 @@ export default function TunnelPage() {
                         }
                         label="连接IP"
                         placeholder={
-                          (form.outNodeId || []).filter((ct) => ct.nodeId !== -1)
-                            .length === 0
+                          (form.outNodeId || []).filter(
+                            (ct) => ct.nodeId !== -1,
+                          ).length === 0
                             ? "请先选择出口节点"
                             : getCommonIpOptions(
                                   (form.outNodeId || [])
@@ -2152,8 +2168,10 @@ export default function TunnelPage() {
                           const selectedKey = Array.from(keys)[0] as string;
                           const value =
                             selectedKey === "__default__" ? "" : selectedKey;
+
                           setForm((prev) => {
                             const currentOutNodes = prev.outNodeId || [];
+
                             if (currentOutNodes.length === 0) {
                               return {
                                 ...prev,
@@ -2168,6 +2186,7 @@ export default function TunnelPage() {
                                 ],
                               };
                             }
+
                             return {
                               ...prev,
                               outNodeId: currentOutNodes.map((ct) => ({
@@ -2451,8 +2470,8 @@ export default function TunnelPage() {
                                           isDiagnosing
                                             ? "bg-warning-50 dark:bg-warning-900/20"
                                             : isSuccess
-                                            ? "bg-white dark:bg-gray-800"
-                                            : "bg-danger-50 dark:bg-danger-900/30"
+                                              ? "bg-white dark:bg-gray-800"
+                                              : "bg-danger-50 dark:bg-danger-900/30"
                                         }`}
                                       >
                                         <td className="px-3 py-2">
@@ -2487,8 +2506,8 @@ export default function TunnelPage() {
                                               isDiagnosing
                                                 ? "warning"
                                                 : isSuccess
-                                                ? "success"
-                                                : "danger"
+                                                  ? "success"
+                                                  : "danger"
                                             }
                                             size="sm"
                                             variant="flat"
@@ -2637,8 +2656,8 @@ export default function TunnelPage() {
                                       isDiagnosing
                                         ? "border-warning-200 dark:border-warning-300/30 bg-warning-50 dark:bg-warning-900/20"
                                         : isSuccess
-                                        ? "border-divider bg-white dark:bg-gray-800"
-                                        : "border-danger-200 dark:border-danger-300/30 bg-danger-50 dark:bg-danger-900/30"
+                                          ? "border-divider bg-white dark:bg-gray-800"
+                                          : "border-danger-200 dark:border-danger-300/30 bg-danger-50 dark:bg-danger-900/30"
                                     }`}
                                   >
                                     <div className="flex items-start gap-2 mb-2">

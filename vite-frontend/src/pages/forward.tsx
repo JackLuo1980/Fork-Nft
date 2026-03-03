@@ -87,6 +87,10 @@ import {
   executeForwardBatchRedeploy,
   executeForwardBatchToggleService,
 } from "@/pages/forward/batch-actions";
+import {
+  convertNyItemToForwardInput,
+  parseNyFormatData,
+} from "@/pages/forward/import-format";
 import { buildForwardOrder, FORWARD_ORDER_KEY } from "@/pages/forward/order";
 import { PageLoadingState } from "@/components/page-state";
 import { useMobileBreakpoint } from "@/hooks/useMobileBreakpoint";
@@ -119,6 +123,7 @@ interface Forward {
 interface Tunnel {
   id: number;
   name: string;
+  type?: number;
   inIp?: string;
   inNodeId?: Array<{ nodeId: number }>;
   inNodePortSta?: number;
@@ -127,6 +132,7 @@ interface Tunnel {
 
 interface Node {
   id: number;
+  name?: string;
   serverIp?: string;
   serverIpV4?: string;
   serverIpV6?: string;
@@ -168,8 +174,7 @@ const FORWARD_COMPACT_MODE_EVENT = "forwardCompactModeChanged";
 const FORWARD_GROUP_ORDER_CONFIG_KEY = "forward_group_order_map";
 const FORWARD_GROUP_COLLAPSED_CONFIG_KEY = "forward_group_collapsed_map";
 const FORWARD_GROUP_ORDER_LOCAL_STORAGE_PREFIX = "forward-group-order";
-const FORWARD_GROUP_COLLAPSED_LOCAL_STORAGE_PREFIX =
-  "forward-group-collapsed";
+const FORWARD_GROUP_COLLAPSED_LOCAL_STORAGE_PREFIX = "forward-group-collapsed";
 const FORWARD_TUNNEL_GROUP_SORTABLE_PREFIX = "forward-tunnel-group";
 const FORWARD_GROUPED_TABLE_MIN_WIDTH_CLASS = "min-w-[1320px]";
 const FORWARD_GROUPED_TABLE_COLUMN_CLASS = {
@@ -239,7 +244,9 @@ const buildForwardGroupCollapsedLocalKey = (tokenUserId: number): string => {
   return `${FORWARD_GROUP_COLLAPSED_LOCAL_STORAGE_PREFIX}:u:${tokenUserId}`;
 };
 
-const parsePreferenceMap = <T,>(raw: string | null): Record<string, T> | null => {
+const parsePreferenceMap = <T,>(
+  raw: string | null,
+): Record<string, T> | null => {
   if (!raw) {
     return null;
   }
@@ -283,7 +290,9 @@ const parseGroupOrderMap = (raw: string | null): ForwardGroupOrderMap => {
   return result;
 };
 
-const parseGroupCollapsedMap = (raw: string | null): ForwardGroupCollapsedMap => {
+const parseGroupCollapsedMap = (
+  raw: string | null,
+): ForwardGroupCollapsedMap => {
   const parsed = parsePreferenceMap<unknown>(raw);
 
   if (!parsed) {
@@ -357,11 +366,17 @@ const sanitizeGroupCollapsedMap = (
   return sanitized;
 };
 
-const buildTunnelGroupCollapseKey = (userId: number, tunnelKey: string): string => {
+const buildTunnelGroupCollapseKey = (
+  userId: number,
+  tunnelKey: string,
+): string => {
   return `${userId}:${tunnelKey}`;
 };
 
-const buildTunnelGroupSortableId = (userId: number, tunnelKey: string): string => {
+const buildTunnelGroupSortableId = (
+  userId: number,
+  tunnelKey: string,
+): string => {
   return `${FORWARD_TUNNEL_GROUP_SORTABLE_PREFIX}:${userId}:${tunnelKey}`;
 };
 
@@ -392,7 +407,9 @@ const parseTunnelGroupSortableId = (
   return { userId, tunnelKey };
 };
 
-const buildAvailableGroupData = (forwards: Forward[]): {
+const buildAvailableGroupData = (
+  forwards: Forward[],
+): {
   availableTunnelKeysByUser: Map<number, Set<string>>;
   availableCollapseKeys: Set<string>;
 } => {
@@ -541,9 +558,16 @@ export default function ForwardPage() {
   >(null);
 
   // 导入相关状态
+  type ImportFormat = "flvx" | "ny";
   const [importModalOpen, setImportModalOpen] = useState(false);
   const [importData, setImportData] = useState("");
   const [importLoading, setImportLoading] = useState(false);
+  const [importFormat, setImportFormat] = useState<ImportFormat>("flvx");
+  const [selectedEntryNode, setSelectedEntryNode] = useState<number | null>(
+    null,
+  );
+  const [matchedTunnels, setMatchedTunnels] = useState<Tunnel[]>([]);
+  const [tunnelSelectModalOpen, setTunnelSelectModalOpen] = useState(false);
   const [selectedTunnelForImport, setSelectedTunnelForImport] = useState<
     number | null
   >(null);
@@ -724,7 +748,9 @@ export default function ForwardPage() {
     }
 
     try {
-      const currentRes = await getConfigByName(FORWARD_GROUP_COLLAPSED_CONFIG_KEY);
+      const currentRes = await getConfigByName(
+        FORWARD_GROUP_COLLAPSED_CONFIG_KEY,
+      );
       const globalMap =
         parsePreferenceMap<ForwardGroupCollapsedMap>(
           currentRes.code === 0 && typeof currentRes.data?.value === "string"
@@ -793,12 +819,13 @@ export default function ForwardPage() {
               ? globalOrderRes.data.value
               : null,
           );
-          const globalCollapsedMap = parsePreferenceMap<ForwardGroupCollapsedMap>(
-            globalCollapsedRes.code === 0 &&
-              typeof globalCollapsedRes.data?.value === "string"
-              ? globalCollapsedRes.data.value
-              : null,
-          );
+          const globalCollapsedMap =
+            parsePreferenceMap<ForwardGroupCollapsedMap>(
+              globalCollapsedRes.code === 0 &&
+                typeof globalCollapsedRes.data?.value === "string"
+                ? globalCollapsedRes.data.value
+                : null,
+            );
 
           const globalOrderBucket = globalOrderMap?.[tokenUserId.toString()];
           const globalCollapsedBucket =
@@ -809,7 +836,9 @@ export default function ForwardPage() {
             typeof globalOrderBucket === "object" &&
             !Array.isArray(globalOrderBucket)
           ) {
-            localOrderMap = parseGroupOrderMap(JSON.stringify(globalOrderBucket));
+            localOrderMap = parseGroupOrderMap(
+              JSON.stringify(globalOrderBucket),
+            );
           }
 
           if (
@@ -1147,7 +1176,10 @@ export default function ForwardPage() {
       } else {
       }
 
-      if (allTunnelsRes.status === "fulfilled" && allTunnelsRes.value.code === 0) {
+      if (
+        allTunnelsRes.status === "fulfilled" &&
+        allTunnelsRes.value.code === 0
+      ) {
         setAllTunnels((allTunnelsRes.value.data || []) as Tunnel[]);
       }
 
@@ -1454,6 +1486,7 @@ export default function ForwardPage() {
   const handleDiagnose = async (forward: Forward) => {
     diagnosisAbortRef.current?.abort();
     const abortController = new AbortController();
+
     diagnosisAbortRef.current = abortController;
 
     setCurrentDiagnosisForward(forward);
@@ -1487,6 +1520,7 @@ export default function ForwardPage() {
             const startItems = Array.isArray(payload.items)
               ? (payload.items as ForwardDiagnosisResult["results"])
               : [];
+
             setDiagnosisResult((prev) => ({
               forwardName: startForwardName,
               timestamp: Date.now(),
@@ -1526,6 +1560,7 @@ export default function ForwardPage() {
                   diagnosing: false,
                 });
               }
+
               return {
                 ...base,
                 timestamp: Date.now(),
@@ -1561,8 +1596,11 @@ export default function ForwardPage() {
 
         if (response.code === 0) {
           const resultData = response.data as ForwardDiagnosisResult;
-          const successCount = resultData.results.filter((r) => r.success).length;
+          const successCount = resultData.results.filter(
+            (r) => r.success,
+          ).length;
           const failedCount = resultData.results.length - successCount;
+
           setDiagnosisResult(resultData);
           setDiagnosisProgress({
             total: resultData.results.length,
@@ -1772,129 +1810,208 @@ export default function ForwardPage() {
     }
 
     setImportLoading(true);
-    setImportResults([]); // 清空之前的结果
+    setImportResults([]);
 
     try {
-      const lines = importData
-        .trim()
-        .split("\n")
-        .filter((line) => line.trim());
+      if (importFormat === "ny") {
+        const parsedItems = parseNyFormatData(importData);
 
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i].trim();
-        const parts = line.split("|");
+        if (parsedItems.length === 0) {
+          toast.error("未解析到有效的ny格式数据");
 
-        if (parts.length < 2) {
-          setImportResults((prev) => [
-            {
-              line,
-              success: false,
-              message: "格式错误：需要至少包含目标地址和转发名称",
-            },
-            ...prev,
-          ]);
-          continue;
+          setImportLoading(false);
+
+          return;
         }
 
-        const [remoteAddr, name, inPort] = parts;
-
-        if (!remoteAddr.trim() || !name.trim()) {
-          setImportResults((prev) => [
-            {
-              line,
-              success: false,
-              message: "目标地址和转发名称不能为空",
-            },
-            ...prev,
-          ]);
-          continue;
-        }
-
-        // 验证远程地址格式 - 支持单个地址或多个地址用逗号分隔
-        const addresses = remoteAddr.trim().split(",");
-        const addressPattern = /^[^:]+:\d+$/;
-        const isValidFormat = addresses.every((addr) =>
-          addressPattern.test(addr.trim()),
-        );
-
-        if (!isValidFormat) {
-          setImportResults((prev) => [
-            {
-              line,
-              success: false,
-              message:
-                "目标地址格式错误，应为 地址:端口 格式，多个地址用逗号分隔",
-            },
-            ...prev,
-          ]);
-          continue;
-        }
-
-        try {
-          // 处理入口端口
-          let portNumber: number | null = null;
-
-          if (inPort && inPort.trim()) {
-            const port = parseInt(inPort.trim());
-
-            if (isNaN(port) || port < 1 || port > 65535) {
-              setImportResults((prev) => [
-                {
-                  line,
-                  success: false,
-                  message: "入口端口格式错误，应为1-65535之间的数字",
-                },
-                ...prev,
-              ]);
-              continue;
-            }
-            portNumber = port;
-          }
-
-          // 调用创建转发接口
-          const response = await createForward({
-            name: name.trim(),
-            tunnelId: selectedTunnelForImport, // 使用用户选择的隧道
-            inPort: portNumber, // 使用指定端口或自动分配
-            remoteAddr: remoteAddr.trim(),
-            strategy: "fifo",
-          });
-
-          if (response.code === 0) {
+        for (const item of parsedItems) {
+          if (item.error) {
             setImportResults((prev) => [
               {
-                line,
-                success: true,
-                message: "创建成功",
-                forwardName: name.trim(),
+                line: item.line,
+                success: false,
+                message: item.error || "解析失败",
               },
               ...prev,
             ]);
-          } else {
+
+            continue;
+          }
+
+          if (!item.parsed) {
+            setImportResults((prev) => [
+              {
+                line: item.line,
+                success: false,
+                message: "解析失败",
+              },
+              ...prev,
+            ]);
+
+            continue;
+          }
+
+          const parsedNyItem = item.parsed;
+          const nyForwardInput = convertNyItemToForwardInput(parsedNyItem);
+
+          try {
+            const response = await createForward({
+              name: nyForwardInput.name,
+              tunnelId: selectedTunnelForImport,
+              inPort: nyForwardInput.inPort,
+              remoteAddr: nyForwardInput.remoteAddr,
+              strategy: nyForwardInput.strategy,
+            });
+
+            if (response.code === 0) {
+              setImportResults((prev) => [
+                {
+                  line: item.line,
+                  success: true,
+                  message: `创建成功 (${parsedNyItem.dest.length}个目标)`,
+                  forwardName: nyForwardInput.name,
+                },
+                ...prev,
+              ]);
+            } else {
+              setImportResults((prev) => [
+                {
+                  line: item.line,
+                  success: false,
+                  message: response.msg || "创建失败",
+                },
+                ...prev,
+              ]);
+            }
+          } catch {
+            setImportResults((prev) => [
+              {
+                line: item.line,
+                success: false,
+                message: "网络错误，创建失败",
+              },
+              ...prev,
+            ]);
+          }
+        }
+      } else {
+        const lines = importData
+          .trim()
+          .split("\n")
+          .filter((line) => line.trim());
+
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i].trim();
+          const parts = line.split("|");
+
+          if (parts.length < 2) {
             setImportResults((prev) => [
               {
                 line,
                 success: false,
-                message: response.msg || "创建失败",
+                message: "格式错误：需要至少包含目标地址和转发名称",
+              },
+              ...prev,
+            ]);
+            continue;
+          }
+
+          const [remoteAddr, name, inPort] = parts;
+
+          if (!remoteAddr.trim() || !name.trim()) {
+            setImportResults((prev) => [
+              {
+                line,
+                success: false,
+                message: "目标地址和转发名称不能为空",
+              },
+              ...prev,
+            ]);
+            continue;
+          }
+
+          const addresses = remoteAddr.trim().split(",");
+          const addressPattern = /^[^:]+:\d+$/;
+          const isValidFormat = addresses.every((addr) =>
+            addressPattern.test(addr.trim()),
+          );
+
+          if (!isValidFormat) {
+            setImportResults((prev) => [
+              {
+                line,
+                success: false,
+                message:
+                  "目标地址格式错误，应为 地址:端口 格式，多个地址用逗号分隔",
+              },
+              ...prev,
+            ]);
+            continue;
+          }
+
+          try {
+            let portNumber: number | null = null;
+
+            if (inPort && inPort.trim()) {
+              const port = parseInt(inPort.trim());
+
+              if (isNaN(port) || port < 1 || port > 65535) {
+                setImportResults((prev) => [
+                  {
+                    line,
+                    success: false,
+                    message: "入口端口格式错误，应为1-65535之间的数字",
+                  },
+                  ...prev,
+                ]);
+                continue;
+              }
+              portNumber = port;
+            }
+
+            const response = await createForward({
+              name: name.trim(),
+              tunnelId: selectedTunnelForImport,
+              inPort: portNumber,
+              remoteAddr: remoteAddr.trim(),
+              strategy: "fifo",
+            });
+
+            if (response.code === 0) {
+              setImportResults((prev) => [
+                {
+                  line,
+                  success: true,
+                  message: "创建成功",
+                  forwardName: name.trim(),
+                },
+                ...prev,
+              ]);
+            } else {
+              setImportResults((prev) => [
+                {
+                  line,
+                  success: false,
+                  message: response.msg || "创建失败",
+                },
+                ...prev,
+              ]);
+            }
+          } catch {
+            setImportResults((prev) => [
+              {
+                line,
+                success: false,
+                message: "网络错误，创建失败",
               },
               ...prev,
             ]);
           }
-        } catch {
-          setImportResults((prev) => [
-            {
-              line,
-              success: false,
-              message: "网络错误，创建失败",
-            },
-            ...prev,
-          ]);
         }
       }
 
-      toast.success(`导入执行完成`);
+      toast.success("导入执行完成");
 
-      // 导入完成后刷新转发列表
       await loadData(false);
     } catch {
       toast.error("导入过程中发生错误");
@@ -1998,7 +2115,9 @@ export default function ForwardPage() {
     const activeTunnelGroupKey = buildForwardTunnelGroupKey(
       activeForward?.tunnelName,
     );
-    const overTunnelGroupKey = buildForwardTunnelGroupKey(overForward?.tunnelName);
+    const overTunnelGroupKey = buildForwardTunnelGroupKey(
+      overForward?.tunnelName,
+    );
 
     // 非精简模式仅允许在同一用户+隧道分组内拖拽，避免混排
     if (!compactMode) {
@@ -2286,13 +2405,7 @@ export default function ForwardPage() {
     }
 
     return sortedByDb;
-  }, [
-    forwards,
-    forwardOrder,
-    filterUserId,
-    filterTunnelId,
-    searchKeyword,
-  ]);
+  }, [forwards, forwardOrder, filterUserId, filterTunnelId, searchKeyword]);
 
   const availableGroupData = useMemo(
     () => buildAvailableGroupData(forwards),
@@ -2429,7 +2542,10 @@ export default function ForwardPage() {
           return aIndex - bIndex;
         }
 
-        const nameCompare = compareForwardTunnelNameAsc(a.tunnelName, b.tunnelName);
+        const nameCompare = compareForwardTunnelNameAsc(
+          a.tunnelName,
+          b.tunnelName,
+        );
 
         if (nameCompare !== 0) {
           return nameCompare;
@@ -2522,7 +2638,10 @@ export default function ForwardPage() {
     bodyClassName: string;
     children: React.ReactNode;
   }) => {
-    const sortableId = buildTunnelGroupSortableId(groupUserId, tunnel.tunnelKey);
+    const sortableId = buildTunnelGroupSortableId(
+      groupUserId,
+      tunnel.tunnelKey,
+    );
     const {
       attributes,
       listeners,
@@ -2639,6 +2758,7 @@ export default function ForwardPage() {
 
       if (!existingUser) {
         userMap.set(uId, { id: uId, name: userName });
+
         return;
       }
 
@@ -3620,7 +3740,9 @@ export default function ForwardPage() {
                   }}
                 >
                   <TableHeader>
-                    {selectMode && <TableColumn className="w-14">选择</TableColumn>}
+                    {selectMode && (
+                      <TableColumn className="w-14">选择</TableColumn>
+                    )}
                     <TableColumn className="w-10 pl-4" />
                     <TableColumn>用户</TableColumn>
                     <TableColumn>名称</TableColumn>
@@ -3680,7 +3802,10 @@ export default function ForwardPage() {
             onDragEnd={handleDragEnd}
             onDragStart={() => {}}
           >
-            <SortableContext items={sortableForwardIds} strategy={rectSortingStrategy}>
+            <SortableContext
+              items={sortableForwardIds}
+              strategy={rectSortingStrategy}
+            >
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
                 {sortedForwards.map((forward) =>
                   forward && forward.id ? (
@@ -3742,7 +3867,10 @@ export default function ForwardPage() {
                     >
                       <SortableContext
                         items={group.tunnels.map((tunnel) =>
-                          buildTunnelGroupSortableId(group.userId, tunnel.tunnelKey),
+                          buildTunnelGroupSortableId(
+                            group.userId,
+                            tunnel.tunnelKey,
+                          ),
                         )}
                         strategy={verticalListSortingStrategy}
                       >
@@ -3801,10 +3929,14 @@ export default function ForwardPage() {
                                       </TableColumn>
                                     )}
                                     <TableColumn
-                                      className={FORWARD_GROUPED_TABLE_COLUMN_CLASS.drag}
+                                      className={
+                                        FORWARD_GROUPED_TABLE_COLUMN_CLASS.drag
+                                      }
                                     />
                                     <TableColumn
-                                      className={FORWARD_GROUPED_TABLE_COLUMN_CLASS.name}
+                                      className={
+                                        FORWARD_GROUPED_TABLE_COLUMN_CLASS.name
+                                      }
                                     >
                                       名称
                                     </TableColumn>
@@ -3816,7 +3948,9 @@ export default function ForwardPage() {
                                       入口
                                     </TableColumn>
                                     <TableColumn
-                                      className={FORWARD_GROUPED_TABLE_COLUMN_CLASS.target}
+                                      className={
+                                        FORWARD_GROUPED_TABLE_COLUMN_CLASS.target
+                                      }
                                     >
                                       目标
                                     </TableColumn>
@@ -3835,7 +3969,9 @@ export default function ForwardPage() {
                                       总流量
                                     </TableColumn>
                                     <TableColumn
-                                      className={FORWARD_GROUPED_TABLE_COLUMN_CLASS.status}
+                                      className={
+                                        FORWARD_GROUPED_TABLE_COLUMN_CLASS.status
+                                      }
                                     >
                                       状态
                                     </TableColumn>
@@ -3860,14 +3996,22 @@ export default function ForwardPage() {
                                         <SortableTableRow
                                           formatFlow={formatFlow}
                                           formatInAddress={formatInAddress}
-                                          formatRemoteAddress={formatRemoteAddress}
+                                          formatRemoteAddress={
+                                            formatRemoteAddress
+                                          }
                                           forward={forward}
-                                          getStrategyDisplay={getStrategyDisplay}
+                                          getStrategyDisplay={
+                                            getStrategyDisplay
+                                          }
                                           handleDelete={handleDelete}
                                           handleDiagnose={handleDiagnose}
                                           handleEdit={handleEdit}
-                                          handleServiceToggle={handleServiceToggle}
-                                          hasMultipleAddresses={hasMultipleAddresses}
+                                          handleServiceToggle={
+                                            handleServiceToggle
+                                          }
+                                          hasMultipleAddresses={
+                                            hasMultipleAddresses
+                                          }
                                           selectMode={selectMode}
                                           selectedIds={selectedIds}
                                           showAddressModal={showAddressModal}
@@ -3939,7 +4083,10 @@ export default function ForwardPage() {
                   >
                     <SortableContext
                       items={group.tunnels.map((tunnel) =>
-                        buildTunnelGroupSortableId(group.userId, tunnel.tunnelKey),
+                        buildTunnelGroupSortableId(
+                          group.userId,
+                          tunnel.tunnelKey,
+                        ),
                       )}
                       strategy={verticalListSortingStrategy}
                     >
@@ -3949,7 +4096,10 @@ export default function ForwardPage() {
                           .filter((id) => id > 0);
                         const collapsed =
                           sanitizedCollapsedTunnelGroups[
-                            buildTunnelGroupCollapseKey(group.userId, tunnel.tunnelKey)
+                            buildTunnelGroupCollapseKey(
+                              group.userId,
+                              tunnel.tunnelKey,
+                            )
                           ] === true;
 
                         return (
@@ -3964,7 +4114,10 @@ export default function ForwardPage() {
                             tunnel={tunnel}
                             wrapperClassName="rounded-xl border border-secondary/20 bg-secondary/5 space-y-3"
                             onToggleCollapsed={() =>
-                              toggleTunnelGroupCollapsed(group.userId, tunnel.tunnelKey)
+                              toggleTunnelGroupCollapsed(
+                                group.userId,
+                                tunnel.tunnelKey,
+                              )
                             }
                           >
                             <DndContext
@@ -4124,7 +4277,9 @@ export default function ForwardPage() {
 
                   <Select
                     description="从入口节点IP中选择，留空使用默认"
-                    isDisabled={!form.tunnelId || currentTunnelIpOptions.length === 0}
+                    isDisabled={
+                      !form.tunnelId || currentTunnelIpOptions.length === 0
+                    }
                     label="监听IP"
                     placeholder={
                       form.tunnelId
@@ -4458,17 +4613,58 @@ export default function ForwardPage() {
         <ModalContent>
           <ModalHeader className="flex flex-col gap-1">
             <h2 className="text-xl font-bold">导入转发数据</h2>
-            <p className="text-small text-default-500">
-              格式：目标地址|转发名称|入口端口，每行一个，入口端口留空将自动分配可用端口
-            </p>
-            <p className="text-small text-default-400">
-              目标地址支持单个地址(如：example.com:8080)或多个地址用逗号分隔(如：3.3.3.3:3,4.4.4.4:4)
-            </p>
+            {importFormat === "flvx" ? (
+              <>
+                <p className="text-small text-default-500">
+                  格式：目标地址|转发名称|入口端口，每行一个，入口端口留空将自动分配可用端口
+                </p>
+                <p className="text-small text-default-400">
+                  目标地址支持单个地址(如：example.com:8080)或多个地址用逗号分隔(如：3.3.3.3:3,4.4.4.4:4)
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-small text-default-500">
+                  ny格式：JSON对象，支持多个目标地址（负载均衡）
+                </p>
+                <p className="text-small text-default-400">
+                  格式：&#123;&quot;dest&quot;:[&quot;地址:端口&quot;],&quot;listen_port&quot;:端口,&quot;name&quot;:&quot;名称&quot;&#125;
+                </p>
+              </>
+            )}
           </ModalHeader>
           <ModalBody className="pb-6">
             <div className="space-y-4">
-              {/* 隧道选择 */}
-              <div>
+              {/* 格式选择 */}
+              <Select
+                isRequired
+                label="导入格式"
+                placeholder="请选择导入格式"
+                selectedKeys={[importFormat]}
+                variant="bordered"
+                onSelectionChange={(keys) => {
+                  const selectedKey = Array.from(keys)[0] as ImportFormat;
+
+                  if (selectedKey) {
+                    setImportFormat(selectedKey);
+                    setSelectedTunnelForImport(null);
+                    setSelectedEntryNode(null);
+                    setMatchedTunnels([]);
+                    setImportData("");
+                    setImportResults([]);
+                  }
+                }}
+              >
+                <SelectItem key="flvx" textValue="flvx格式">
+                  flvx格式（管道分隔）
+                </SelectItem>
+                <SelectItem key="ny" textValue="ny格式">
+                  ny格式（JSON）
+                </SelectItem>
+              </Select>
+
+              {/* flvx格式：隧道选择 */}
+              {importFormat === "flvx" && (
                 <Select
                   isRequired
                   label="选择导入隧道"
@@ -4496,35 +4692,113 @@ export default function ForwardPage() {
                     </SelectItem>
                   ))}
                 </Select>
-              </div>
+              )}
+
+              {/* ny格式：入口节点选择 */}
+              {importFormat === "ny" && (
+                <Select
+                  isRequired
+                  label="选择入口节点"
+                  placeholder="请选择入口节点"
+                  selectedKeys={
+                    selectedEntryNode ? [selectedEntryNode.toString()] : []
+                  }
+                  variant="bordered"
+                  onSelectionChange={(keys) => {
+                    const selectedKey = Array.from(keys)[0] as string;
+                    const nodeId = selectedKey ? parseInt(selectedKey) : null;
+
+                    setSelectedEntryNode(nodeId);
+                    setSelectedTunnelForImport(null);
+
+                    if (nodeId) {
+                      const matched = allTunnels.filter(
+                        (t) =>
+                          t.type === 1 &&
+                          t.inNodeId?.some((n) => n.nodeId === nodeId),
+                      );
+
+                      setMatchedTunnels(matched);
+
+                      if (matched.length === 0) {
+                        toast.error(
+                          "该入口节点没有匹配的隧道，请先创建端口转发类型的隧道",
+                        );
+                      } else if (matched.length === 1) {
+                        setSelectedTunnelForImport(matched[0].id);
+                      } else {
+                        setTunnelSelectModalOpen(true);
+                      }
+                    } else {
+                      setMatchedTunnels([]);
+                    }
+                  }}
+                >
+                  {nodes.map((node) => (
+                    <SelectItem key={node.id.toString()} textValue={node.name}>
+                      {node.name}
+                    </SelectItem>
+                  ))}
+                </Select>
+              )}
+
+              {/* ny格式：显示匹配的隧道 */}
+              {importFormat === "ny" && matchedTunnels.length > 0 && (
+                <div className="text-xs text-default-500">
+                  {matchedTunnels.length === 1 ? (
+                    <span>
+                      已匹配隧道：<strong>{matchedTunnels[0].name}</strong>
+                    </span>
+                  ) : (
+                    <span>
+                      找到 {matchedTunnels.length}{" "}
+                      个匹配隧道，请点击下方按钮选择
+                    </span>
+                  )}
+                </div>
+              )}
+
+              {/* ny格式：多隧道选择按钮 */}
+              {importFormat === "ny" &&
+                matchedTunnels.length > 1 &&
+                !selectedTunnelForImport && (
+                  <Button
+                    color="primary"
+                    size="sm"
+                    variant="flat"
+                    onPress={() => setTunnelSelectModalOpen(true)}
+                  >
+                    选择隧道（{matchedTunnels.length}个可选）
+                  </Button>
+                )}
 
               {/* 输入区域 */}
-              <div>
-                <Textarea
-                  classNames={{
-                    input: "font-mono text-sm",
-                  }}
-                  label="导入数据"
-                  maxRows={12}
-                  minRows={8}
-                  placeholder="请输入要导入的转发数据，格式：目标地址|转发名称|入口端口"
-                  value={importData}
-                  variant="flat"
-                  onChange={(e) => setImportData(e.target.value)}
-                />
-              </div>
+              <Textarea
+                classNames={{
+                  input: "font-mono text-sm",
+                }}
+                label="导入数据"
+                maxRows={12}
+                minRows={8}
+                placeholder={
+                  importFormat === "flvx"
+                    ? "请输入要导入的转发数据，格式：目标地址|转发名称|入口端口"
+                    : '请输入ny格式数据，每行一个JSON对象，如：{"dest":["1.2.3.4:80"],"listen_port":8080,"name":"转发1"}'
+                }
+                value={importData}
+                variant="flat"
+                onChange={(e) => setImportData(e.target.value)}
+              />
 
               {/* 导入结果 */}
               {importResults.length > 0 && (
                 <div>
                   <div className="flex items-center justify-between mb-2">
                     <h3 className="text-base font-semibold">导入结果</h3>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-default-500">
-                        成功：{importResults.filter((r) => r.success).length} /
-                        总计：{importResults.length}
-                      </span>
-                    </div>
+                    <span className="text-xs text-default-500">
+                      成功：{importResults.filter((r) => r.success).length} /
+                      总计：{importResults.length}
+                    </span>
                   </div>
 
                   <div
@@ -4613,11 +4887,63 @@ export default function ForwardPage() {
             </Button>
             <Button
               color="warning"
-              isDisabled={!importData.trim() || !selectedTunnelForImport}
+              isDisabled={
+                !importData.trim() ||
+                !selectedTunnelForImport ||
+                (importFormat === "ny" && !selectedEntryNode)
+              }
               isLoading={importLoading}
               onPress={executeImport}
             >
               开始导入
+            </Button>
+          </ModalFooter>
+        </ModalContent>
+      </Modal>
+
+      {/* 隧道选择模态框（ny格式多隧道匹配时使用） */}
+      <Modal
+        backdrop="blur"
+        isOpen={tunnelSelectModalOpen}
+        placement="center"
+        size="md"
+        onClose={() => setTunnelSelectModalOpen(false)}
+      >
+        <ModalContent>
+          <ModalHeader>选择隧道</ModalHeader>
+          <ModalBody>
+            <p className="text-sm text-default-500 mb-3">
+              找到多个使用该入口节点的隧道，请选择一个：
+            </p>
+            <div className="space-y-2">
+              {matchedTunnels.map((tunnel) => (
+                <Button
+                  key={tunnel.id}
+                  className="w-full justify-start"
+                  color={
+                    selectedTunnelForImport === tunnel.id
+                      ? "primary"
+                      : "default"
+                  }
+                  variant={
+                    selectedTunnelForImport === tunnel.id ? "solid" : "bordered"
+                  }
+                  onPress={() => {
+                    setSelectedTunnelForImport(tunnel.id);
+                    setTunnelSelectModalOpen(false);
+                  }}
+                >
+                  {tunnel.name}
+                </Button>
+              ))}
+            </div>
+          </ModalBody>
+          <ModalFooter>
+            <Button
+              variant="light"
+              onPress={() => setTunnelSelectModalOpen(false)}
+            >
+              取消
             </Button>
           </ModalFooter>
         </ModalContent>
@@ -4815,8 +5141,8 @@ export default function ForwardPage() {
                                           isDiagnosing
                                             ? "bg-warning-50 dark:bg-warning-900/20"
                                             : isSuccess
-                                            ? "bg-white dark:bg-gray-800"
-                                            : "bg-danger-50 dark:bg-danger-900/30"
+                                              ? "bg-white dark:bg-gray-800"
+                                              : "bg-danger-50 dark:bg-danger-900/30"
                                         }`}
                                       >
                                         <td className="px-3 py-2">
@@ -4851,8 +5177,8 @@ export default function ForwardPage() {
                                               isDiagnosing
                                                 ? "warning"
                                                 : isSuccess
-                                                ? "success"
-                                                : "danger"
+                                                  ? "success"
+                                                  : "danger"
                                             }
                                             size="sm"
                                             variant="flat"
@@ -5002,8 +5328,8 @@ export default function ForwardPage() {
                                       isDiagnosing
                                         ? "border-warning-200 dark:border-warning-300/30 bg-warning-50 dark:bg-warning-900/20"
                                         : isSuccess
-                                        ? "border-divider bg-white dark:bg-gray-800"
-                                        : "border-danger-200 dark:border-danger-300/30 bg-danger-50 dark:bg-danger-900/30"
+                                          ? "border-divider bg-white dark:bg-gray-800"
+                                          : "border-danger-200 dark:border-danger-300/30 bg-danger-50 dark:bg-danger-900/30"
                                     }`}
                                   >
                                     <div className="flex items-start gap-2 mb-2">
