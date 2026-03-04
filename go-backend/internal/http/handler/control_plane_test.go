@@ -43,6 +43,20 @@ func TestBuildForwardServiceBaseCandidatesWithZeroPreferred(t *testing.T) {
 	}
 }
 
+func TestBuildForwardServiceBaseWithResolvedUserTunnel(t *testing.T) {
+	got := buildForwardServiceBaseWithResolvedUserTunnel(12, 34, 56)
+	if got != "12_34_56" {
+		t.Fatalf("expected 12_34_56, got %s", got)
+	}
+}
+
+func TestBuildForwardServiceBaseWithResolvedUserTunnelFallbackToZero(t *testing.T) {
+	got := buildForwardServiceBaseWithResolvedUserTunnel(12, 34, 0)
+	if got != "12_34_0" {
+		t.Fatalf("expected 12_34_0, got %s", got)
+	}
+}
+
 func TestShouldTryLegacySingleService(t *testing.T) {
 	if !shouldTryLegacySingleService("PauseService") {
 		t.Fatalf("PauseService should require legacy fallback")

@@ -245,6 +245,12 @@ func (h *Handler) syncForwardServicesWithWarnings(forward *forwardRecord, method
 	}
 	warnings := make([]string, 0)
 
+	// Resolve user tunnel first so runtime service name can carry the real user_tunnel id.
+	userTunnelID, utLimiterID, utSpeed, err := h.resolveUserTunnelAndLimiter(forward.UserID, forward.TunnelID)
+	if err != nil {
+		return nil, err
+	}
+
 	// Determine limiter from forward's SpeedID first, fallback to UserTunnel's limiter
 	var limiterID *int64
 	var speed *int
@@ -260,17 +266,11 @@ func (h *Handler) syncForwardServicesWithWarnings(forward *forwardRecord, method
 
 	if limiterID == nil {
 		// Fall back to UserTunnel speed limit
-		var utLimiterID *int64
-		var utSpeed *int
-		_, utLimiterID, utSpeed, err = h.resolveUserTunnelAndLimiter(forward.UserID, forward.TunnelID)
-		if err != nil {
-			return nil, err
-		}
 		limiterID = utLimiterID
 		speed = utSpeed
 	}
 
-	serviceBase := buildForwardServiceBase(forward.ID, forward.UserID, 0)
+	serviceBase := buildForwardServiceBaseWithResolvedUserTunnel(forward.ID, forward.UserID, userTunnelID)
 	tunnelTLSProtocol, err := h.isTunnelSelectedTLSProtocol(forward.TunnelID)
 	if err != nil {
 		return nil, err
@@ -1360,6 +1360,13 @@ func parseTargetAddress(addr string) (string, int, error) {
 
 func buildForwardServiceBase(forwardID, userID, userTunnelID int64) string {
 	return fmt.Sprintf("%d_%d_%d", forwardID, userID, userTunnelID)
+}
+
+func buildForwardServiceBaseWithResolvedUserTunnel(forwardID, userID, resolvedUserTunnelID int64) string {
+	if resolvedUserTunnelID <= 0 {
+		return buildForwardServiceBase(forwardID, userID, 0)
+	}
+	return buildForwardServiceBase(forwardID, userID, resolvedUserTunnelID)
 }
 
 func buildForwardServiceBaseCandidates(forwardID, userID, preferredUserTunnelID int64, userTunnelIDs []int64) []string {
