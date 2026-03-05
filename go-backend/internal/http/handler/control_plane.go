@@ -290,6 +290,11 @@ func (h *Handler) syncForwardServicesWithWarnings(forward *forwardRecord, method
 		services := buildForwardServiceConfigs(serviceBase, forward, tunnel, node, fp.Port, strings.TrimSpace(fp.InIP), limiterID, tunnelTLSProtocol)
 		_, err = h.sendNodeCommand(node.ID, method, services, true, false)
 		if err != nil && allowFallbackAdd && method == "UpdateService" {
+			if isNotFoundError(err) {
+				if delErr := h.deleteForwardServicesOnNode(forward, node.ID); delErr != nil && !isNotFoundError(delErr) {
+					return warnings, fmt.Errorf("节点 %s 清理旧服务失败: %w", node.Name, delErr)
+				}
+			}
 			_, err = h.sendNodeCommand(node.ID, "AddService", services, true, false)
 		}
 		if err != nil && strings.EqualFold(strings.TrimSpace(method), "UpdateService") && isAddressAlreadyInUseError(err) {
@@ -437,40 +442,26 @@ func (h *Handler) controlForwardServices(forward *forwardRecord, commandType str
 	candidateTunnelIDs = append(candidateTunnelIDs, allUserTunnelIDs...)
 	bases := buildForwardServiceBaseCandidates(forward.ID, forward.UserID, userTunnelID, candidateTunnelIDs)
 	seen := map[int64]struct{}{}
+	healed := false
 	for _, fp := range ports {
 		if _, ok := seen[fp.NodeID]; ok {
 			continue
 		}
 		seen[fp.NodeID] = struct{}{}
 
-		var lastNotFoundErr error
-		nodeHandled := false
+		nodeHandled, lastNotFoundErr, err := h.controlForwardServicesOnNode(fp.NodeID, bases, commandType)
+		if err != nil {
+			return err
+		}
 
-		for _, base := range bases {
-			variants := []string{base + "_tcp", base + "_udp"}
-			if shouldTryLegacySingleService(commandType) || strings.EqualFold(strings.TrimSpace(commandType), "DeleteService") {
-				variants = append(variants, base)
+		if !nodeHandled && lastNotFoundErr != nil && !healed && shouldSelfHealForwardServiceControl(commandType) {
+			if healErr := h.syncForwardServices(forward, "UpdateService", true); healErr != nil {
+				return healErr
 			}
-
-			candidateHandled := false
-			for _, name := range variants {
-				payload := map[string]interface{}{
-					"services": []string{name},
-				}
-				_, err := h.sendNodeCommand(fp.NodeID, commandType, payload, false, false)
-				if err == nil {
-					candidateHandled = true
-					continue
-				}
-				if !isNotFoundError(err) {
-					return err
-				}
-				lastNotFoundErr = err
-			}
-
-			if candidateHandled {
-				nodeHandled = true
-				break
+			healed = true
+			nodeHandled, lastNotFoundErr, err = h.controlForwardServicesOnNode(fp.NodeID, bases, commandType)
+			if err != nil {
+				return err
 			}
 		}
 
@@ -486,6 +477,49 @@ func (h *Handler) controlForwardServices(forward *forwardRecord, commandType str
 		return errors.New("service control failed")
 	}
 	return nil
+}
+
+func (h *Handler) controlForwardServicesOnNode(nodeID int64, bases []string, commandType string) (bool, error, error) {
+	return controlForwardServiceCommand(bases, commandType, func(name string) error {
+		payload := map[string]interface{}{
+			"services": []string{name},
+		}
+		_, err := h.sendNodeCommand(nodeID, commandType, payload, false, false)
+		return err
+	})
+}
+
+func controlForwardServiceCommand(bases []string, commandType string, send func(name string) error) (bool, error, error) {
+	var lastNotFoundErr error
+	for _, base := range bases {
+		variants := []string{base + "_tcp", base + "_udp"}
+		if shouldTryLegacySingleService(commandType) || strings.EqualFold(strings.TrimSpace(commandType), "DeleteService") {
+			variants = append(variants, base)
+		}
+
+		candidateHandled := false
+		for _, name := range variants {
+			err := send(name)
+			if err == nil {
+				candidateHandled = true
+				continue
+			}
+			if !isNotFoundError(err) {
+				return false, lastNotFoundErr, err
+			}
+			lastNotFoundErr = err
+		}
+
+		if candidateHandled {
+			return true, nil, nil
+		}
+	}
+	return false, lastNotFoundErr, nil
+}
+
+func shouldSelfHealForwardServiceControl(commandType string) bool {
+	cmd := strings.ToLower(strings.TrimSpace(commandType))
+	return cmd == "pauseservice" || cmd == "resumeservice"
 }
 
 func (h *Handler) applyNodeProtocolChange(nodeID int64, httpVal, tlsVal, socksVal int) error {

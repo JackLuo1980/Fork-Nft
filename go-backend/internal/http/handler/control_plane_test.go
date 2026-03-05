@@ -69,6 +69,78 @@ func TestShouldTryLegacySingleService(t *testing.T) {
 	}
 }
 
+func TestShouldSelfHealForwardServiceControl(t *testing.T) {
+	if !shouldSelfHealForwardServiceControl("PauseService") {
+		t.Fatalf("PauseService should trigger self-heal")
+	}
+	if !shouldSelfHealForwardServiceControl(" resumeService ") {
+		t.Fatalf("ResumeService should trigger self-heal")
+	}
+	if shouldSelfHealForwardServiceControl("DeleteService") {
+		t.Fatalf("DeleteService should not trigger self-heal")
+	}
+}
+
+func TestControlForwardServiceCommandHandledOnKnownVariant(t *testing.T) {
+	bases := []string{"12_34_56"}
+	called := make([]string, 0)
+	handled, lastNotFoundErr, err := controlForwardServiceCommand(bases, "PauseService", func(name string) error {
+		called = append(called, name)
+		if name == "12_34_56_udp" {
+			return nil
+		}
+		return errors.New("service " + name + " not found")
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !handled {
+		t.Fatalf("expected handled=true")
+	}
+	if lastNotFoundErr != nil {
+		t.Fatalf("expected lastNotFoundErr=nil when handled")
+	}
+	wantCalls := []string{"12_34_56_tcp", "12_34_56_udp", "12_34_56"}
+	if !reflect.DeepEqual(called, wantCalls) {
+		t.Fatalf("expected calls %v, got %v", wantCalls, called)
+	}
+}
+
+func TestControlForwardServiceCommandReturnsLastNotFoundWhenAllMissing(t *testing.T) {
+	bases := []string{"12_34_56"}
+	handled, lastNotFoundErr, err := controlForwardServiceCommand(bases, "PauseService", func(name string) error {
+		return errors.New("service " + name + " not found")
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if handled {
+		t.Fatalf("expected handled=false")
+	}
+	if lastNotFoundErr == nil {
+		t.Fatalf("expected lastNotFoundErr when all variants are missing")
+	}
+}
+
+func TestControlForwardServiceCommandReturnsHardError(t *testing.T) {
+	bases := []string{"12_34_56"}
+	handled, lastNotFoundErr, err := controlForwardServiceCommand(bases, "PauseService", func(name string) error {
+		if name == "12_34_56_tcp" {
+			return errors.New("network timeout")
+		}
+		return nil
+	})
+	if err == nil {
+		t.Fatalf("expected hard error")
+	}
+	if handled {
+		t.Fatalf("expected handled=false on hard error")
+	}
+	if lastNotFoundErr != nil {
+		t.Fatalf("did not expect not-found error alongside hard error")
+	}
+}
+
 func TestIsAlreadyExistsMessage(t *testing.T) {
 	if !isAlreadyExistsMessage("service demo already exists") {
 		t.Fatalf("expected already exists message to be tolerated")
