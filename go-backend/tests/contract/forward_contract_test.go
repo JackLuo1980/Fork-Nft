@@ -1006,7 +1006,7 @@ func TestForwardUpdateRecoversFromAddressInUseContract(t *testing.T) {
 		}
 		mu.Unlock()
 		if shouldFail {
-			return true, "listen tcp 10.42.0.9:44001: bind: address already in use"
+			return true, "create service 57_7_7_tcp failed: listen tcp4 0.0.0.0:46222: bind: address alreadyin use"
 		}
 		return false, ""
 	})

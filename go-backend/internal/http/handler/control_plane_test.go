@@ -180,6 +180,27 @@ func TestDeleteForwardServiceBasesOnNodeRetriesLegacyZeroResidue(t *testing.T) {
 	}
 }
 
+func TestDeleteForwardServiceCandidatesDeletesAllMatchingVariants(t *testing.T) {
+	bases := []string{"57_7_7", "57_7_0"}
+	called := make([]string, 0)
+	err := deleteForwardServiceCandidates(bases, func(name string) error {
+		called = append(called, name)
+		switch name {
+		case "57_7_7_tcp", "57_7_7_udp", "57_7_0_tcp", "57_7_0_udp":
+			return nil
+		default:
+			return errors.New("service " + name + " not found")
+		}
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := []string{"57_7_7_tcp", "57_7_7_udp", "57_7_7", "57_7_0_tcp", "57_7_0_udp", "57_7_0"}
+	if !reflect.DeepEqual(called, want) {
+		t.Fatalf("expected calls %v, got %v", want, called)
+	}
+}
+
 func TestValidateForwardPortAvailabilityRejectsOtherForwardOccupancy(t *testing.T) {
 	h := &Handler{repo: nil}
 	node := &nodeRecord{ID: 9, Name: "test-node"}
@@ -235,8 +256,14 @@ func TestIsAlreadyExistsMessage(t *testing.T) {
 	if !isAlreadyExistsMessage("服务已存在") {
 		t.Fatalf("expected Chinese already exists message to be tolerated")
 	}
+	if !isAlreadyExistsMessage("service demo alreadyexists") {
+		t.Fatalf("missing-space alreadyexists should be tolerated")
+	}
 	if isAlreadyExistsMessage("listen tcp [::]:10001: bind: address already in use") {
 		t.Fatalf("address already in use must not be treated as already exists")
+	}
+	if isAlreadyExistsMessage("create service 57_7_7_tcp failed: listen tcp4 0.0.0.0:46222: bind: address alreadyin use") {
+		t.Fatalf("alreadyin-use variant must not be treated as already exists")
 	}
 }
 
@@ -259,6 +286,9 @@ func TestIsAddressAlreadyInUseError(t *testing.T) {
 	if !isAddressAlreadyInUseError(errors.New("listen tcp [::]:10001: bind: address already in use")) {
 		t.Fatalf("address already in use should be detected")
 	}
+	if !isAddressAlreadyInUseError(errors.New("create service 57_7_7_tcp failed: listen tcp4 0.0.0.0:46222: bind: address alreadyin use")) {
+		t.Fatalf("missing-space alreadyin-use variant should be detected")
+	}
 	if isAddressAlreadyInUseError(errors.New("listen tcp4 13.228.170.187:16765: bind: cannot assign requested address")) {
 		t.Fatalf("cannot assign requested address should not be treated as address-in-use")
 	}
@@ -267,6 +297,9 @@ func TestIsAddressAlreadyInUseError(t *testing.T) {
 func TestIsCannotAssignRequestedAddressError(t *testing.T) {
 	if !isCannotAssignRequestedAddressError(errors.New("listen tcp4 13.228.170.187:16765: bind: cannot assign requested address")) {
 		t.Fatalf("cannot assign requested address should be detected")
+	}
+	if !isCannotAssignRequestedAddressError(errors.New("listen tcp4 13.228.170.187:16765: bind: cannotassignrequestedaddress")) {
+		t.Fatalf("missing-space cannotassignrequestedaddress variant should be detected")
 	}
 	if isCannotAssignRequestedAddressError(errors.New("listen tcp [::]:10001: bind: address already in use")) {
 		t.Fatalf("address already in use should not be treated as cannot-assign")

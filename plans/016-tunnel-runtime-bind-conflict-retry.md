@@ -20,8 +20,12 @@
 - Result: passed.
 - Command: `cd go-backend && go test ./tests/contract/... -run 'TestForwardUpdateRecoversFromAddressInUseContract|TestTunnelUpdateRecoversFromAddressInUseContract'`
 - Result: passed.
+- Command: `cd go-backend && go test ./internal/http/handler/... && go test ./tests/contract/... -run 'TestForwardUpdateRecoversFromAddressInUseContract|TestTunnelUpdateRecoversFromAddressInUseContract'`
+- Result: passed.
 
 ## Investigation Note
 
 - Forward update still has its own independent `address already in use` recovery path in `syncForwardServicesWithWarnings` / `rebindForwardServiceOnSelfOccupiedPort`; tunnel update linkage is not the only possible source of the symptom.
 - Tunnel update also triggers downstream forward `UpdateService` for bound forwards, so users can still observe the same error around a tunnel edit even when the failing runtime is on the tunnel side.
+- Real node output can collapse spaces into variants like `address alreadyin use` / `cannotassignrequestedaddress`; bind-conflict detection now normalizes whitespace before classifying the error.
+- Forward self-heal cleanup now deletes every candidate runtime name variant instead of stopping after the first successful delete, which avoids leaving sibling `_tcp`/`_udp` services behind to keep the port occupied.

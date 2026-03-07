@@ -527,15 +527,17 @@ func controlForwardServiceCommand(bases []string, commandType string, send func(
 }
 
 func deleteForwardServiceCandidates(bases []string, send func(name string) error) error {
-	handled, lastNotFoundErr, err := controlForwardServiceCommand(bases, "DeleteService", send)
-	if err != nil {
-		return err
-	}
-	if handled {
-		return nil
-	}
-	if lastNotFoundErr != nil {
-		return nil
+	for _, base := range bases {
+		for _, name := range append([]string{base + "_tcp", base + "_udp", base}, []string{}...) {
+			err := send(name)
+			if err == nil {
+				continue
+			}
+			if isNotFoundError(err) {
+				continue
+			}
+			return err
+		}
 	}
 	return nil
 }
@@ -1477,10 +1479,11 @@ func isAlreadyExistsMessage(message string) bool {
 	if msg == "" {
 		return false
 	}
-	if strings.Contains(msg, "address already in use") {
+	if isAddressAlreadyInUseMessage(msg) {
 		return false
 	}
-	return strings.Contains(msg, "already exists") || strings.Contains(msg, "已存在")
+	compact := compactErrorMessage(msg)
+	return strings.Contains(msg, "already exists") || strings.Contains(msg, "已存在") || strings.Contains(compact, "alreadyexists")
 }
 
 func isBindAddressInUseError(err error) bool {
@@ -1505,7 +1508,10 @@ func isAddressAlreadyInUseMessage(msg string) bool {
 	if msg == "" {
 		return false
 	}
-	return strings.Contains(msg, "address already in use")
+	if strings.Contains(msg, "address already in use") {
+		return true
+	}
+	return strings.Contains(compactErrorMessage(msg), "addressalreadyinuse")
 }
 
 func isCannotAssignRequestedAddressError(err error) bool {
@@ -1516,7 +1522,18 @@ func isCannotAssignRequestedAddressError(err error) bool {
 	if msg == "" {
 		return false
 	}
-	return strings.Contains(msg, "cannot assign requested address")
+	if strings.Contains(msg, "cannot assign requested address") {
+		return true
+	}
+	return strings.Contains(compactErrorMessage(msg), "cannotassignrequestedaddress")
+}
+
+func compactErrorMessage(msg string) string {
+	msg = strings.TrimSpace(msg)
+	if msg == "" {
+		return ""
+	}
+	return strings.Join(strings.Fields(strings.ToLower(msg)), "")
 }
 
 func buildForwardServiceConfigs(baseName string, forward *forwardRecord, tunnel *tunnelRecord, node *nodeRecord, port int, bindIP string, limiterID *int64, tunnelTLSProtocol bool) []map[string]interface{} {
