@@ -38,23 +38,27 @@ function parseDateText(value: string) {
     return null;
   }
 
-  // 兼容纯数字输入：YYYYMMDD
   const digitsOnly = trimmed.replace(/\D/g, "");
 
-  if (digitsOnly.length === 8) {
+  if (/^\d+$/.test(trimmed)) {
+    if (digitsOnly.length !== 8) {
+      return null;
+    }
+
     const year = Number(digitsOnly.slice(0, 4));
     const month = Number(digitsOnly.slice(4, 6));
     const day = Number(digitsOnly.slice(6, 8));
 
-    if (isValidCalendarDate(year, month, day)) {
-      return { day, month, year };
+    if (!isValidCalendarDate(year, month, day)) {
+      return null;
     }
+
+    return { day, month, year };
   }
 
-  // 兼容多种分隔输入：YYYY-MM-DD / YYYY/MM/DD / YYYY.MM.DD / YYYY年M月D日 / YYYY M D
   const numberParts = trimmed.match(/\d+/g);
 
-  if (!numberParts || numberParts.length < 3 || numberParts[0].length !== 4) {
+  if (!numberParts || numberParts.length !== 3 || numberParts[0].length !== 4) {
     return null;
   }
 

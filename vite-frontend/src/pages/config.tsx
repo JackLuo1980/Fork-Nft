@@ -26,7 +26,7 @@ import {
   updateAnnouncement,
   type AnnouncementData,
 } from "@/api";
-import { SettingsIcon } from "@/components/icons";
+import { BackIcon, SettingsIcon } from "@/components/icons";
 import { isAdmin } from "@/utils/auth";
 import { getCachedConfigs, configCache, updateSiteConfig } from "@/config/site";
 import {
@@ -234,13 +234,19 @@ export default function ConfigPage() {
     Partial<Record<BrandPreviewKey, boolean>>
   >({});
 
+  const canGoBack =
+    typeof window !== "undefined" &&
+    typeof window.history.state?.idx === "number" &&
+    window.history.state.idx > 0;
+
   const handleBack = () => {
-    if (window.history.length > 1) {
+    if (canGoBack) {
       navigate(-1);
 
       return;
     }
-    navigate("/profile");
+
+    navigate("/profile", { replace: true });
   };
 
   // 权限检查
@@ -857,19 +863,13 @@ export default function ConfigPage() {
       <div className="flex items-center gap-3 mb-6">
         <Button
           isIconOnly
-          aria-label="返回"
+          aria-label="返回上一页"
           className="min-w-0 w-9 h-9"
           size="sm"
           variant="flat"
           onPress={handleBack}
         >
-          <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-            <path
-              clipRule="evenodd"
-              d="M12.707 14.707a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414l4-4a1 1 0 111.414 1.414L9.414 9.5l3.293 3.293a1 1 0 010 1.414z"
-              fillRule="evenodd"
-            />
-          </svg>
+          <BackIcon className="w-5 h-5" />
         </Button>
         <SettingsIcon className="w-8 h-8 text-primary" />
         <div>
