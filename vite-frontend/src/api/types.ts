@@ -3,6 +3,9 @@ export interface NodeApiItem {
   name: string;
   status: number;
   inx?: number;
+  remark?: string;
+  tags?: string;
+  expiryTime?: number;
   syncError?: string;
   [key: string]: unknown;
 }
@@ -214,6 +217,9 @@ export interface NodeMutationPayload {
   name?: string;
   status?: number;
   inx?: number;
+  remark?: string;
+  tags?: string;
+  expiryTime?: number;
   serverIp?: string;
   serverIpV4?: string;
   serverIpV6?: string;

@@ -634,7 +634,10 @@ func (r *Repository) ListNodes() ([]map[string]interface{}, error) {
 	for _, n := range nodes {
 		items = append(items, map[string]interface{}{
 			"id": n.ID, "inx": n.Inx, "name": n.Name,
-			"ip": n.ServerIP, "serverIp": n.ServerIP,
+			"remark":     nullableString(n.Remark),
+			"tags":       nullableString(n.Tags),
+			"expiryTime": nullableInt64(n.ExpiryTime),
+			"ip":         n.ServerIP, "serverIp": n.ServerIP,
 			"serverIpV4":    nullableString(n.ServerIPV4),
 			"serverIpV6":    nullableString(n.ServerIPV6),
 			"extraIPs":      nullableString(n.ExtraIPs),
@@ -1814,10 +1817,14 @@ func (r *Repository) exportNodes() ([]model.NodeBackup, error) {
 	for _, n := range nodes {
 		b := model.NodeBackup{
 			ID: n.ID, Name: n.Name, Secret: n.Secret, ServerIP: n.ServerIP,
+			Remark: n.Remark.String, Tags: n.Tags.String,
 			Port: n.Port, HTTP: n.HTTP, TLS: n.TLS, Socks: n.Socks,
 			CreatedTime: n.CreatedTime, Status: n.Status,
 			TCPListenAddr: n.TCPListenAddr, UDPListenAddr: n.UDPListenAddr,
 			Inx: n.Inx, IsRemote: n.IsRemote,
+		}
+		if n.ExpiryTime.Valid {
+			b.ExpiryTime = n.ExpiryTime.Int64
 		}
 		if n.UpdatedTime.Valid {
 			b.UpdatedTime = n.UpdatedTime.Int64
@@ -2168,6 +2175,9 @@ func importNodes(tx *gorm.DB, nodes []model.NodeBackup, now int64) (int, error) 
 		item := model.Node{
 			ID:            n.ID,
 			Name:          n.Name,
+			Remark:        sql.NullString{String: n.Remark, Valid: n.Remark != ""},
+			Tags:          sql.NullString{String: n.Tags, Valid: n.Tags != ""},
+			ExpiryTime:    sql.NullInt64{Int64: n.ExpiryTime, Valid: n.ExpiryTime > 0},
 			Secret:        n.Secret,
 			ServerIP:      n.ServerIP,
 			ServerIPV4:    sql.NullString{String: n.ServerIPv4, Valid: true},
@@ -2192,7 +2202,7 @@ func importNodes(tx *gorm.DB, nodes []model.NodeBackup, now int64) (int, error) 
 		err := tx.Clauses(clause.OnConflict{
 			Columns: []clause.Column{{Name: "id"}},
 			DoUpdates: clause.AssignmentColumns([]string{
-				"name", "secret", "server_ip", "server_ip_v4", "server_ip_v6", "port", "interface_name", "version",
+				"name", "remark", "tags", "expiry_time", "secret", "server_ip", "server_ip_v4", "server_ip_v6", "port", "interface_name", "version",
 				"http", "tls", "socks", "updated_time", "status", "tcp_listen_addr", "udp_listen_addr",
 				"inx", "is_remote", "remote_url", "remote_token", "remote_config",
 			}),

@@ -71,6 +71,9 @@ interface Node {
   id: number;
   inx?: number;
   name: string;
+  remark?: string;
+  tags?: string;
+  expiryTime?: number;
   ip: string;
   serverIp: string;
   serverIpV4?: string;
@@ -105,6 +108,9 @@ interface Node {
 interface NodeForm {
   id: number | null;
   name: string;
+  remark: string;
+  tags: string;
+  expiryTime: number;
   serverHost: string;
   serverIpV4: string;
   serverIpV6: string;
@@ -117,6 +123,80 @@ interface NodeForm {
   tls: number; // 0 关 1 开
   socks: number; // 0 关 1 开
 }
+
+const formatNodeExpiry = (timestamp?: number): string => {
+  if (!timestamp || timestamp <= 0) return "永久有效";
+  return new Date(timestamp).toLocaleString();
+};
+
+const EXPIRING_SOON_DAYS = 7;
+
+type NodeExpiryState = "permanent" | "healthy" | "expiringSoon" | "expired";
+
+type NodeFilterMode = "all" | "expiringSoon" | "expired" | "withExpiry";
+
+const getNodeExpiryMeta = (timestamp?: number) => {
+  if (!timestamp || timestamp <= 0) {
+    return {
+      state: "permanent" as NodeExpiryState,
+      label: "永久有效",
+      tone: "default" as const,
+      accentClassName: "",
+      bannerClassName: "",
+      isHighlighted: false,
+      sortWeight: 3,
+    };
+  }
+
+  const diffMs = timestamp - Date.now();
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays <= 0) {
+    return {
+      state: "expired" as NodeExpiryState,
+      label: "已过期",
+      tone: "danger" as const,
+      accentClassName:
+        "border-red-300/80 bg-red-50/70 shadow-red-100 dark:border-red-500/40 dark:bg-red-950/20",
+      bannerClassName:
+        "bg-red-50 text-red-700 dark:bg-red-950/30 dark:text-red-300",
+      isHighlighted: true,
+      sortWeight: 0,
+    };
+  }
+
+  if (diffDays <= EXPIRING_SOON_DAYS) {
+    return {
+      state: "expiringSoon" as NodeExpiryState,
+      label: diffDays === 1 ? "明天到期" : `${diffDays}天后到期`,
+      tone: "warning" as const,
+      accentClassName:
+        "border-amber-300/80 bg-amber-50/80 shadow-amber-100 dark:border-amber-500/40 dark:bg-amber-950/20",
+      bannerClassName:
+        "bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300",
+      isHighlighted: true,
+      sortWeight: 1,
+    };
+  }
+
+  return {
+    state: "healthy" as NodeExpiryState,
+    label: `${diffDays}天后到期`,
+    tone: "success" as const,
+    accentClassName: "",
+    bannerClassName: "",
+    isHighlighted: false,
+    sortWeight: 2,
+  };
+};
+
+const normalizeNodeTags = (tags?: string): string[] => {
+  if (!tags) return [];
+  return tags
+    .split(",")
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+};
 
 const mergeNodeRealtimeState = (
   incomingNode: Node,
@@ -182,6 +262,10 @@ export default function NodePage() {
     "node-search-keyword",
     "",
   );
+  const [nodeFilterMode, setNodeFilterMode] = useLocalStorageState<NodeFilterMode>(
+    "node-expiry-filter-mode",
+    "all",
+  );
   const [isSearchVisible, setIsSearchVisible] = useState(false);
   const [dialogVisible, setDialogVisible] = useState(false);
   const [dialogTitle, setDialogTitle] = useState("");
@@ -195,6 +279,9 @@ export default function NodePage() {
   const [form, setForm] = useState<NodeForm>({
     id: null,
     name: "",
+    remark: "",
+    tags: "",
+    expiryTime: 0,
     serverHost: "",
     serverIpV4: "",
     serverIpV6: "",
@@ -636,6 +723,9 @@ export default function NodePage() {
     setForm({
       id: node.id,
       name: node.name,
+      remark: node.remark || "",
+      tags: node.tags || "",
+      expiryTime: node.expiryTime || 0,
       serverHost: normalizedHost,
       serverIpV4: normalizedV4,
       serverIpV6: normalizedV6,
@@ -871,6 +961,9 @@ export default function NodePage() {
       const { serverHost, ...rest } = form;
       const data = {
         ...rest,
+        remark: form.remark.trim(),
+        tags: form.tags.trim(),
+        expiryTime: form.expiryTime,
         extraIPs: form.extraIPs,
         serverIp:
           form.serverIpV4?.trim() ||
@@ -892,6 +985,9 @@ export default function NodePage() {
                 ? {
                     ...n,
                     name: form.name,
+                    remark: form.remark.trim(),
+                    tags: form.tags.trim(),
+                    expiryTime: form.expiryTime,
                     serverIp:
                       form.serverIpV4?.trim() ||
                       form.serverIpV6?.trim() ||
@@ -928,6 +1024,9 @@ export default function NodePage() {
     setForm({
       id: null,
       name: "",
+      remark: "",
+      tags: "",
+      expiryTime: 0,
       serverHost: "",
       serverIpV4: "",
       serverIpV6: "",
@@ -1060,6 +1159,20 @@ export default function NodePage() {
     }),
   );
 
+  const nodeExpiryStats = useMemo(() => {
+    return nodeList.reduce(
+      (acc, node) => {
+        const meta = getNodeExpiryMeta(node.expiryTime);
+
+        if (meta.state === "expired") acc.expired += 1;
+        if (meta.state === "expiringSoon") acc.expiringSoon += 1;
+        if (node.expiryTime && node.expiryTime > 0) acc.withExpiry += 1;
+        return acc;
+      },
+      { expired: 0, expiringSoon: 0, withExpiry: 0 },
+    );
+  }, [nodeList]);
+
   // 根据排序顺序获取节点列表
   const sortedNodes = useMemo((): Node[] => {
     if (!nodeList || nodeList.length === 0) return [];
@@ -1072,13 +1185,40 @@ export default function NodePage() {
       filteredNodes = filteredNodes.filter(
         (n) =>
           (n.name && n.name.toLowerCase().includes(lowerKeyword)) ||
+          (n.remark && n.remark.toLowerCase().includes(lowerKeyword)) ||
+          (n.tags && n.tags.toLowerCase().includes(lowerKeyword)) ||
           (n.serverIp && n.serverIp.toLowerCase().includes(lowerKeyword)) ||
           (n.serverIpV4 && n.serverIpV4.toLowerCase().includes(lowerKeyword)) ||
           (n.serverIpV6 && n.serverIpV6.toLowerCase().includes(lowerKeyword)),
       );
     }
 
+    if (nodeFilterMode !== "all") {
+      filteredNodes = filteredNodes.filter((node) => {
+        const expiryMeta = getNodeExpiryMeta(node.expiryTime);
+
+        switch (nodeFilterMode) {
+          case "expiringSoon":
+            return expiryMeta.state === "expiringSoon";
+          case "expired":
+            return expiryMeta.state === "expired";
+          case "withExpiry":
+            return !!node.expiryTime && node.expiryTime > 0;
+          default:
+            return true;
+        }
+      });
+    }
+
     const sortedByDb = [...filteredNodes].sort((a, b) => {
+      const expiryDiff =
+        getNodeExpiryMeta(a.expiryTime).sortWeight -
+        getNodeExpiryMeta(b.expiryTime).sortWeight;
+
+      if (expiryDiff !== 0) {
+        return expiryDiff;
+      }
+
       const aInx = a.inx ?? 0;
       const bInx = b.inx ?? 0;
 
@@ -1110,7 +1250,7 @@ export default function NodePage() {
     }
 
     return sortedByDb;
-  }, [nodeList, nodeOrder, searchKeyword]);
+  }, [nodeFilterMode, nodeList, nodeOrder, searchKeyword]);
 
   const sortableNodeIds = useMemo(
     () => sortedNodes.map((n) => n.id),
@@ -1120,15 +1260,41 @@ export default function NodePage() {
   return (
     <AnimatedPage className="px-3 lg:px-6 py-8">
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between mb-6 gap-3">
-        <div className="flex-1 max-w-sm flex items-center gap-2">
+        <div className="flex flex-1 flex-col gap-3 lg:flex-row lg:items-center">
           <SearchBar
             isVisible={isSearchVisible}
-            placeholder="搜索节点名称或IP"
+            placeholder="搜索名称、IP、备注或标签"
             value={searchKeyword}
             onChange={setSearchKeyword}
             onClose={() => setIsSearchVisible(false)}
             onOpen={() => setIsSearchVisible(true)}
           />
+
+          <Select
+            className="w-full max-w-sm lg:w-56"
+            label="到期筛选"
+            selectedKeys={[nodeFilterMode]}
+            size="sm"
+            variant="bordered"
+            onSelectionChange={(keys) => {
+              const selected = Array.from(keys)[0] as NodeFilterMode | undefined;
+
+              setNodeFilterMode(selected || "all");
+            }}
+          >
+            <SelectItem key="all" textValue="全部节点">
+              全部节点
+            </SelectItem>
+            <SelectItem key="expiringSoon" textValue="7天内到期">
+              7天内到期 ({nodeExpiryStats.expiringSoon})
+            </SelectItem>
+            <SelectItem key="expired" textValue="已过期">
+              已过期 ({nodeExpiryStats.expired})
+            </SelectItem>
+            <SelectItem key="withExpiry" textValue="已设置到期时间">
+              已设置到期时间 ({nodeExpiryStats.withExpiry})
+            </SelectItem>
+          </Select>
         </div>
 
         <div className="min-h-9 min-w-0 max-w-full overflow-x-auto touch-pan-x">
@@ -1239,13 +1405,14 @@ export default function NodePage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
               {sortedNodes.map((node) => {
                 const isRemoteNode = node.isRemote === 1;
+                const expiryMeta = getNodeExpiryMeta(node.expiryTime);
 
                 return (
                   <SortableItem key={node.id} id={node.id}>
                     {(listeners) => (
                       <Card
                         key={node.id}
-                        className="group shadow-sm border border-divider hover:shadow-md transition-shadow duration-200 overflow-hidden"
+                        className={`group shadow-sm border border-divider hover:shadow-md transition-shadow duration-200 overflow-hidden ${expiryMeta.accentClassName}`}
                       >
                         <CardHeader className="pb-2 md:pb-2">
                           <div className="flex justify-between items-start w-full">
@@ -1313,8 +1480,60 @@ export default function NodePage() {
                               {getRemoteSyncErrorMessage(node.syncError)}
                             </div>
                           )}
+                          {expiryMeta.isHighlighted && (
+                            <div
+                              className={`mb-3 flex items-center justify-between gap-3 rounded-md px-2 py-1.5 text-xs font-medium ${expiryMeta.bannerClassName}`}
+                            >
+                              <span>节点到期提醒</span>
+                              <span>{expiryMeta.label}</span>
+                            </div>
+                          )}
                           {/* 基础信息 */}
                           <div className="space-y-2 mb-4">
+                            {(node.remark?.trim() || node.tags?.trim()) && (
+                              <div className="rounded-lg border border-divider/80 bg-default-50/80 px-3 py-2">
+                                {node.remark?.trim() && (
+                                  <div className="text-xs leading-5 text-default-700 whitespace-pre-wrap break-words">
+                                    {node.remark.trim()}
+                                  </div>
+                                )}
+                                {normalizeNodeTags(node.tags).length > 0 && (
+                                  <div className="mt-2 flex flex-wrap gap-1.5">
+                                    {normalizeNodeTags(node.tags).map((tag) => (
+                                      <Chip
+                                        key={`${node.id}-${tag}`}
+                                        className="text-[11px]"
+                                        color="secondary"
+                                        size="sm"
+                                        variant="flat"
+                                      >
+                                        #{tag}
+                                      </Chip>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                            {node.expiryTime && node.expiryTime > 0 && (
+                              <div className="flex justify-between text-sm">
+                                <span className="text-default-600">到期时间</span>
+                                <div className="text-right ml-2">
+                                  <div className="text-xs text-warning-700 dark:text-warning-400">
+                                    {formatNodeExpiry(node.expiryTime)}
+                                  </div>
+                                  <div className="mt-1">
+                                    <Chip
+                                      className="text-[11px]"
+                                      color={expiryMeta.tone}
+                                      size="sm"
+                                      variant="flat"
+                                    >
+                                      {expiryMeta.label}
+                                    </Chip>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                             <div className="flex justify-between items-center text-sm min-w-0">
                               <span className="text-default-600 flex-shrink-0">
                                 IP
@@ -1615,6 +1834,52 @@ export default function NodePage() {
                   setForm((prev) => ({ ...prev, name: e.target.value }))
                 }
               />
+
+              <Textarea
+                description="可记录供应商、用途、续费说明等补充信息"
+                label="备注"
+                maxRows={4}
+                minRows={3}
+                placeholder="例如: 搬瓦工年付，2026-12 续费，日本中转"
+                value={form.remark}
+                variant="bordered"
+                onChange={(e) =>
+                  setForm((prev) => ({ ...prev, remark: e.target.value }))
+                }
+              />
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input
+                  description="多个标签用逗号分隔，可用于搜索过滤"
+                  label="标签"
+                  placeholder="例如: 年付,日本中转,测试机"
+                  value={form.tags}
+                  variant="bordered"
+                  onChange={(e) =>
+                    setForm((prev) => ({ ...prev, tags: e.target.value }))
+                  }
+                />
+
+                <Input
+                  description="留空表示永久有效，可用于记录节点到期时间"
+                  label="到期时间"
+                  type="datetime-local"
+                  value={
+                    form.expiryTime > 0
+                      ? new Date(form.expiryTime).toISOString().slice(0, 16)
+                      : ""
+                  }
+                  variant="bordered"
+                  onChange={(e) =>
+                    setForm((prev) => ({
+                      ...prev,
+                      expiryTime: e.target.value
+                        ? new Date(e.target.value).getTime()
+                        : 0,
+                    }))
+                  }
+                />
+              </div>
 
               <Input
                 description="可选：不带协议、不带端口。建议在 IPv4 和 IPv6 都未填写时使用。至少填写一个 IPv4/IPv6/域名"

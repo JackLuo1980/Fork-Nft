@@ -1,10 +1,11 @@
-import type { ForwardApiItem } from "@/api/types";
+import type { ForwardApiItem, NodeApiItem } from "@/api/types";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 
 import {
   getAnnouncement,
+  getDashboardNodeExpiryList,
   getUserPackageInfo,
   type AnnouncementData,
 } from "@/api";
@@ -52,6 +53,14 @@ export interface DashboardStatisticsFlow {
   time: string;
 }
 
+export interface DashboardNodeExpiryItem {
+  id: number;
+  name: string;
+  remark?: string;
+  tags?: string;
+  expiryTime?: number;
+}
+
 const DASHBOARD_POLL_INTERVAL_MS = 5000;
 const EXPIRATION_NOTIFICATION_STORAGE_KEY =
   "dashboard:last-expiration-notification";
@@ -75,6 +84,7 @@ interface DashboardDataState {
   userTunnels: DashboardUserTunnel[];
   forwardList: DashboardForward[];
   statisticsFlows: DashboardStatisticsFlow[];
+  nodeExpiryReminders: DashboardNodeExpiryItem[];
   isAdmin: boolean;
   announcement: AnnouncementData | null;
 }
@@ -193,6 +203,28 @@ const normalizeTunnelPermissions = (items: DashboardUserTunnel[]) => {
   }));
 };
 
+const normalizeNodeExpiryReminders = (items: NodeApiItem[]) => {
+  const now = Date.now();
+  const warningWindowMs = 7 * 24 * 60 * 60 * 1000;
+
+  return (items || [])
+    .map((item) => ({
+      id: item.id,
+      name: item.name || "",
+      remark: typeof item.remark === "string" ? item.remark : "",
+      tags: typeof item.tags === "string" ? item.tags : "",
+      expiryTime:
+        typeof item.expiryTime === "number" && item.expiryTime > 0
+          ? item.expiryTime
+          : undefined,
+    }))
+    .filter((item) => {
+      if (!item.expiryTime) return false;
+      return item.expiryTime <= now + warningWindowMs;
+    })
+    .sort((a, b) => (a.expiryTime || 0) - (b.expiryTime || 0));
+};
+
 export const useDashboardData = (): DashboardDataState => {
   const [loading, setLoading] = useState(true);
   const [userInfo, setUserInfo] = useState<DashboardUserInfo>(
@@ -203,12 +235,16 @@ export const useDashboardData = (): DashboardDataState => {
   const [statisticsFlows, setStatisticsFlows] = useState<
     DashboardStatisticsFlow[]
   >([]);
+  const [nodeExpiryReminders, setNodeExpiryReminders] = useState<
+    DashboardNodeExpiryItem[]
+  >([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [announcement, setAnnouncement] = useState<AnnouncementData | null>(
     null,
   );
   const isMountedRef = useRef(true);
   const packageRequestInFlightRef = useRef(false);
+  const nodeExpiryRequestInFlightRef = useRef(false);
 
   const applyPackageData = useCallback((data: {
     userInfo?: DashboardUserInfo;
@@ -291,18 +327,46 @@ export const useDashboardData = (): DashboardDataState => {
     }
   }, []);
 
+  const loadNodeExpiryData = useCallback(async () => {
+    if (nodeExpiryRequestInFlightRef.current) {
+      return;
+    }
+
+    nodeExpiryRequestInFlightRef.current = true;
+
+    try {
+      const res = await getDashboardNodeExpiryList();
+
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      if (res.code === 0 && Array.isArray(res.data)) {
+        setNodeExpiryReminders(normalizeNodeExpiryReminders(res.data));
+      }
+    } catch {
+    } finally {
+      nodeExpiryRequestInFlightRef.current = false;
+    }
+  }, []);
+
   useEffect(() => {
     isMountedRef.current = true;
-    setIsAdmin(getAdminFlag());
+    const adminFlag = getAdminFlag();
+
+    setIsAdmin(adminFlag);
 
     void loadPackageData({ notifyOnError: true });
     void loadAnnouncement();
+    if (adminFlag) {
+      void loadNodeExpiryData();
+    }
     localStorage.setItem("e", "/dashboard");
 
     return () => {
       isMountedRef.current = false;
     };
-  }, [loadAnnouncement, loadPackageData]);
+  }, [loadAnnouncement, loadNodeExpiryData, loadPackageData]);
 
   useEffect(() => {
     if (typeof document === "undefined") {
@@ -312,6 +376,9 @@ export const useDashboardData = (): DashboardDataState => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
         void loadPackageData({ silent: true });
+        if (isAdmin) {
+          void loadNodeExpiryData();
+        }
       }
     };
 
@@ -321,6 +388,9 @@ export const useDashboardData = (): DashboardDataState => {
       }
 
       void loadPackageData({ silent: true });
+      if (isAdmin) {
+        void loadNodeExpiryData();
+      }
     }, DASHBOARD_POLL_INTERVAL_MS);
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
@@ -329,7 +399,7 @@ export const useDashboardData = (): DashboardDataState => {
       window.clearInterval(interval);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [loadPackageData]);
+  }, [isAdmin, loadNodeExpiryData, loadPackageData]);
 
   return {
     loading,
@@ -337,6 +407,7 @@ export const useDashboardData = (): DashboardDataState => {
     userTunnels,
     forwardList,
     statisticsFlows,
+    nodeExpiryReminders,
     isAdmin,
     announcement,
   };
