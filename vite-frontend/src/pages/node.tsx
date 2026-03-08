@@ -65,6 +65,8 @@ import { useNodeRealtime } from "@/pages/node/use-node-realtime";
 import { useLocalStorageState } from "@/hooks/use-local-storage-state";
 import { loadStoredOrder, saveOrder } from "@/utils/order-storage";
 
+const NODE_FALLBACK_REFRESH_INTERVAL_MS = 15000;
+
 interface Node {
   id: number;
   inx?: number;
@@ -115,6 +117,21 @@ interface NodeForm {
   tls: number; // 0 关 1 开
   socks: number; // 0 关 1 开
 }
+
+const mergeNodeRealtimeState = (
+  incomingNode: Node,
+  existingNode?: Node,
+): Node => {
+  return {
+    ...incomingNode,
+    systemInfo: existingNode?.systemInfo ?? incomingNode.systemInfo ?? null,
+    copyLoading: existingNode?.copyLoading ?? incomingNode.copyLoading ?? false,
+    upgradeLoading:
+      existingNode?.upgradeLoading ?? incomingNode.upgradeLoading ?? false,
+    rollbackLoading:
+      existingNode?.rollbackLoading ?? incomingNode.rollbackLoading ?? false,
+  };
+};
 
 const SortableItem = ({
   id,
@@ -251,8 +268,13 @@ export default function NodePage() {
   });
 
   // 加载节点列表
-  const loadNodes = useCallback(async () => {
-    setLoading(true);
+  const loadNodes = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false;
+
+    if (!silent) {
+      setLoading(true);
+    }
+
     try {
       const res = await getNodeList();
 
@@ -270,7 +292,13 @@ export default function NodePage() {
           copyLoading: false,
         }));
 
-        setNodeList(nodesData);
+        setNodeList((prev) => {
+          const previousById = new Map(prev.map((node) => [node.id, node]));
+
+          return nodesData.map((node) =>
+            mergeNodeRealtimeState(node, previousById.get(node.id)),
+          );
+        });
 
         // 优先使用数据库中的 inx 字段进行排序，否则回退到本地排序
         const hasDbOrdering = nodesData.some(
@@ -292,12 +320,18 @@ export default function NodePage() {
           );
         }
       } else {
-        toast.error(res.msg || "加载节点列表失败");
+        if (!silent) {
+          toast.error(res.msg || "加载节点列表失败");
+        }
       }
     } catch {
-      toast.error("网络错误，请重试");
+      if (!silent) {
+        toast.error("网络错误，请重试");
+      }
     } finally {
-      setLoading(false);
+      if (!silent) {
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -370,13 +404,29 @@ export default function NodePage() {
     }
   };
 
-  const { wsConnected, wsConnecting } = useNodeRealtime({
+  const { wsConnected, wsConnecting, usingPollingFallback } = useNodeRealtime({
     onMessage: handleWebSocketMessage,
   });
 
   useEffect(() => {
     loadNodes();
   }, [loadNodes]);
+
+  useEffect(() => {
+    if (!usingPollingFallback) {
+      return;
+    }
+
+    void loadNodes({ silent: true });
+
+    const interval = window.setInterval(() => {
+      void loadNodes({ silent: true });
+    }, NODE_FALLBACK_REFRESH_INTERVAL_MS);
+
+    return () => {
+      window.clearInterval(interval);
+    };
+  }, [loadNodes, usingPollingFallback]);
 
   // 格式化速度
   const formatSpeed = (bytesPerSecond: number): string => {
@@ -1162,7 +1212,11 @@ export default function NodePage() {
           className="mb-4"
           color="warning"
           description={
-            wsConnecting ? "监控连接中..." : "监控连接已断开，正在重连..."
+            wsConnecting
+              ? "监控连接中..."
+              : usingPollingFallback
+                ? "监控连接已断开，已切换为列表自动刷新兜底模式。"
+                : "监控连接已断开，正在重连..."
           }
           variant="flat"
         />

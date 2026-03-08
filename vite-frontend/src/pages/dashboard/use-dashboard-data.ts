@@ -1,6 +1,6 @@
 import type { ForwardApiItem } from "@/api/types";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import toast from "react-hot-toast";
 
 import {
@@ -52,6 +52,23 @@ export interface DashboardStatisticsFlow {
   time: string;
 }
 
+const DASHBOARD_POLL_INTERVAL_MS = 5000;
+const EXPIRATION_NOTIFICATION_STORAGE_KEY =
+  "dashboard:last-expiration-notification";
+
+const buildExpirationNotificationKey = (
+  userInfo: DashboardUserInfo,
+  tunnels: DashboardUserTunnel[],
+) => {
+  const userExpTime = userInfo.expTime ?? "permanent";
+  const tunnelExpirationKey = [...tunnels]
+    .map((tunnel) => `${tunnel.tunnelId}:${tunnel.expTime ?? "permanent"}`)
+    .sort()
+    .join("|");
+
+  return `user:${userExpTime};tunnels:${tunnelExpirationKey}`;
+};
+
 interface DashboardDataState {
   loading: boolean;
   userInfo: DashboardUserInfo;
@@ -66,8 +83,10 @@ const checkExpirationNotifications = (
   userInfo: DashboardUserInfo,
   tunnels: DashboardUserTunnel[],
 ) => {
-  const notificationKey = `expiration-${userInfo.expTime}-${tunnels.map((t) => t.expTime).join(",")}`;
-  const lastNotified = localStorage.getItem("lastNotified");
+  const notificationKey = buildExpirationNotificationKey(userInfo, tunnels);
+  const lastNotified = localStorage.getItem(
+    EXPIRATION_NOTIFICATION_STORAGE_KEY,
+  );
 
   if (lastNotified === notificationKey) {
     return;
@@ -148,7 +167,7 @@ const checkExpirationNotifications = (
   });
 
   if (hasNotification) {
-    localStorage.setItem("lastNotified", notificationKey);
+    localStorage.setItem(EXPIRATION_NOTIFICATION_STORAGE_KEY, notificationKey);
   }
 };
 
@@ -188,60 +207,129 @@ export const useDashboardData = (): DashboardDataState => {
   const [announcement, setAnnouncement] = useState<AnnouncementData | null>(
     null,
   );
+  const isMountedRef = useRef(true);
+  const packageRequestInFlightRef = useRef(false);
 
-  useEffect(() => {
-    const loadAnnouncement = async () => {
-      try {
-        const res = await getAnnouncement();
+  const applyPackageData = useCallback((data: {
+    userInfo?: DashboardUserInfo;
+    tunnelPermissions?: DashboardUserTunnel[];
+    forwards?: ForwardApiItem[];
+    statisticsFlows?: DashboardStatisticsFlow[];
+  }) => {
+    const normalizedTunnelPermissions = normalizeTunnelPermissions(
+      data.tunnelPermissions || [],
+    );
+    const normalizedForwards = normalizeForwards(data.forwards || []);
 
-        if (res.code === 0 && res.data && res.data.enabled === 1) {
-          setAnnouncement(res.data);
-        }
-      } catch {}
-    };
+    if (!isMountedRef.current) {
+      return;
+    }
 
-    const loadPackageData = async () => {
-      setLoading(true);
+    setUserInfo(data.userInfo || ({} as DashboardUserInfo));
+    setUserTunnels(normalizedTunnelPermissions);
+    setForwardList(normalizedForwards);
+    setStatisticsFlows(data.statisticsFlows || []);
+
+    checkExpirationNotifications(
+      data.userInfo || ({} as DashboardUserInfo),
+      normalizedTunnelPermissions,
+    );
+  }, []);
+
+  const loadPackageData = useCallback(
+    async ({ silent = false, notifyOnError = false } = {}) => {
+      if (packageRequestInFlightRef.current) {
+        return;
+      }
+
+      packageRequestInFlightRef.current = true;
+
+      if (!silent && isMountedRef.current) {
+        setLoading(true);
+      }
+
       try {
         const res = await getUserPackageInfo();
 
         if (res.code === 0) {
-          const data = res.data;
-          const normalizedTunnelPermissions = normalizeTunnelPermissions(
-            data.tunnelPermissions || [],
-          );
-          const normalizedForwards = normalizeForwards(data.forwards || []);
-
-          setUserInfo(data.userInfo || ({} as DashboardUserInfo));
-          setUserTunnels(normalizedTunnelPermissions);
-          setForwardList(normalizedForwards);
-          setStatisticsFlows(data.statisticsFlows || []);
-
-          checkExpirationNotifications(
-            data.userInfo,
-            normalizedTunnelPermissions,
-          );
-        } else {
+          applyPackageData(res.data || {});
+        } else if (notifyOnError) {
           toast.error(res.msg || "获取套餐信息失败");
         }
       } catch {
-        toast.error("获取套餐信息失败");
+        if (notifyOnError) {
+          toast.error("获取套餐信息失败");
+        }
       } finally {
-        setLoading(false);
+        packageRequestInFlightRef.current = false;
+
+        if (!silent && isMountedRef.current) {
+          setLoading(false);
+        }
+      }
+    },
+    [applyPackageData],
+  );
+
+  const loadAnnouncement = useCallback(async () => {
+    try {
+      const res = await getAnnouncement();
+
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      if (res.code === 0 && res.data && res.data.enabled === 1) {
+        setAnnouncement(res.data);
+      } else {
+        setAnnouncement(null);
+      }
+    } catch {
+      if (isMountedRef.current) {
+        setAnnouncement(null);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    setIsAdmin(getAdminFlag());
+
+    void loadPackageData({ notifyOnError: true });
+    void loadAnnouncement();
+    localStorage.setItem("e", "/dashboard");
+
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, [loadAnnouncement, loadPackageData]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") {
+      return;
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void loadPackageData({ silent: true });
       }
     };
 
-    setLoading(true);
-    setUserInfo({} as DashboardUserInfo);
-    setUserTunnels([]);
-    setForwardList([]);
-    setStatisticsFlows([]);
-    setIsAdmin(getAdminFlag());
+    const interval = window.setInterval(() => {
+      if (document.visibilityState !== "visible") {
+        return;
+      }
 
-    loadPackageData();
-    loadAnnouncement();
-    localStorage.setItem("e", "/dashboard");
-  }, []);
+      void loadPackageData({ silent: true });
+    }, DASHBOARD_POLL_INTERVAL_MS);
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [loadPackageData]);
 
   return {
     loading,
