@@ -1620,27 +1620,23 @@ func processServerAddress(serverAddr string) string {
 	if strings.HasPrefix(serverAddr, "[") {
 		return serverAddr
 	}
-	if looksLikeIPv6(serverAddr) {
-		return "[" + strings.Trim(serverAddr, "[]") + "]"
-	}
 
 	idx := strings.LastIndex(serverAddr, ":")
 	if idx < 0 {
+		if looksLikeIPv6(serverAddr) {
+			return "[" + serverAddr + "]"
+		}
 		return serverAddr
 	}
-	if strings.Count(serverAddr, ":") != 1 {
-		return "[" + strings.Trim(serverAddr, "[]") + "]"
-	}
-
 	host := strings.TrimSpace(serverAddr[:idx])
 	port := strings.TrimSpace(serverAddr[idx+1:])
 	if host == "" || port == "" {
 		return serverAddr
 	}
 	if looksLikeIPv6(host) {
-		return "[" + strings.Trim(host, "[]") + "]:" + port
+		return "[" + host + "]:" + port
 	}
-	return host + ":" + port
+	return serverAddr
 }
 
 func normalizeServerAddressInput(serverAddr string) string {
