@@ -2,6 +2,7 @@ package socket
 
 import (
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -94,5 +95,33 @@ func TestDetectWebSocketScheme(t *testing.T) {
 	}
 	if detectWebSocketScheme("http://panel.example.com/system-info") != "" {
 		t.Fatalf("expected empty detection for non-websocket scheme")
+	}
+}
+
+func TestSanitizeWebSocketURL(t *testing.T) {
+	raw := "wss://panel.example.com/system-info?type=1&secret=abc&version=2.0.2"
+	sanitized := sanitizeWebSocketURL(raw)
+
+	if strings.Contains(sanitized, "secret=abc") {
+		t.Fatalf("expected secret to be masked, got %s", sanitized)
+	}
+	if !strings.Contains(sanitized, "secret=%2A%2A%2A") {
+		t.Fatalf("expected masked secret in url, got %s", sanitized)
+	}
+}
+
+func TestFormatWebSocketDialErrorIncludesHTTPStatus(t *testing.T) {
+	err := errors.New("websocket: bad handshake")
+	resp := &http.Response{
+		Status: "403 Forbidden",
+		Body:   io.NopCloser(strings.NewReader("forbidden")),
+	}
+
+	msg := formatWebSocketDialError(err, resp)
+	if !strings.Contains(msg, "HTTP 403 Forbidden") {
+		t.Fatalf("expected status in message, got %s", msg)
+	}
+	if !strings.Contains(msg, "forbidden") {
+		t.Fatalf("expected response body in message, got %s", msg)
 	}
 }

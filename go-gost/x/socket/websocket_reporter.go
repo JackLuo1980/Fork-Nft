@@ -266,7 +266,7 @@ func (w *WebSocketReporter) connect() error {
 		return nil
 	})
 
-	fmt.Printf("✅ WebSocket连接建立成功 (%s, http=%d, tls=%d, socks=%d)\n", usedURL, cfg.Http, cfg.Tls, cfg.Socks)
+	fmt.Printf("✅ WebSocket连接建立成功 (%s, http=%d, tls=%d, socks=%d)\n", sanitizeWebSocketURL(usedURL), cfg.Http, cfg.Tls, cfg.Socks)
 	return nil
 }
 
@@ -345,20 +345,64 @@ func dialWebSocketWithFallback(dialer *websocket.Dialer, candidates []string) (*
 
 	var errs []string
 	for i, targetURL := range candidates {
-		conn, _, err := wsDial(dialer, targetURL)
+		conn, resp, err := wsDial(dialer, targetURL)
 		if err == nil {
 			if i > 0 {
-				fmt.Printf("↪️ WebSocket已自动回退到: %s\n", targetURL)
+				fmt.Printf("↪️ WebSocket已自动回退成功: %s\n", sanitizeWebSocketURL(targetURL))
 			}
 			return conn, targetURL, nil
 		}
-		errs = append(errs, fmt.Sprintf("%s => %v", targetURL, err))
+		errMsg := formatWebSocketDialError(err, resp)
+		errs = append(errs, fmt.Sprintf("%s => %s", sanitizeWebSocketURL(targetURL), errMsg))
 		if i < len(candidates)-1 {
-			fmt.Printf("⚠️ WebSocket连接尝试失败，准备回退: %s => %v\n", targetURL, err)
+			fmt.Printf(
+				"⚠️ WebSocket连接失败，准备从 %s 回退到 %s: %s\n",
+				strings.ToUpper(detectWebSocketScheme(targetURL)),
+				strings.ToUpper(detectWebSocketScheme(candidates[i+1])),
+				errMsg,
+			)
 		}
 	}
 
-	return nil, "", fmt.Errorf("连接WebSocket失败: %s", strings.Join(errs, " | "))
+	return nil, "", fmt.Errorf("连接WebSocket失败（已尝试%d种协议）: %s", len(candidates), strings.Join(errs, " | "))
+}
+
+func sanitizeWebSocketURL(rawURL string) string {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return rawURL
+	}
+
+	q := u.Query()
+	if q.Get("secret") != "" {
+		q.Set("secret", "***")
+		u.RawQuery = q.Encode()
+	}
+	return u.String()
+}
+
+func formatWebSocketDialError(err error, resp *http.Response) string {
+	if err == nil {
+		return ""
+	}
+	if resp == nil {
+		return err.Error()
+	}
+
+	msg := fmt.Sprintf("%s (HTTP %s)", err, resp.Status)
+	if resp.Body == nil {
+		return msg
+	}
+
+	body, readErr := io.ReadAll(io.LimitReader(resp.Body, 256))
+	if readErr != nil {
+		return msg
+	}
+	bodyText := strings.TrimSpace(string(body))
+	if bodyText == "" {
+		return msg
+	}
+	return fmt.Sprintf("%s, body=%q", msg, bodyText)
 }
 
 // handleConnection 处理WebSocket连接
