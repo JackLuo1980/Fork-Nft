@@ -1650,13 +1650,24 @@ export default function NodePage() {
                   node.expiryTime,
                   node.renewalCycle,
                 );
+                const connectionStatusMeta = getConnectionStatusMeta(
+                  node.connectionStatus,
+                );
+                const hasRemark = Boolean(node.remark?.trim());
+                const metaCount =
+                  1 +
+                  (isRemoteNode ? 1 : 0) +
+                  (node.expiryTime && node.expiryTime > 0 && node.renewalCycle
+                    ? 1
+                    : 0) +
+                  (hasRemark ? 1 : 0);
 
                 return (
                   <SortableItem key={node.id} id={node.id}>
                     {(listeners) => (
                       <Card
                         key={node.id}
-                        className={`group shadow-sm border border-divider hover:shadow-md transition-shadow duration-200 overflow-hidden h-full flex flex-col ${expiryMeta.accentClassName}`}
+                        className={`group relative shadow-sm border border-divider hover:shadow-md transition-shadow duration-200 overflow-hidden h-full flex flex-col ${expiryMeta.accentClassName}`}
                       >
                         <CardHeader className="pb-3 md:pb-3">
                           <div className="flex justify-between items-start w-full gap-3">
@@ -1683,51 +1694,97 @@ export default function NodePage() {
                                   onValueChange={() => toggleSelect(node.id)}
                                 />
                               )}
-                              <h3 className="pt-0.5 font-semibold text-foreground truncate text-sm leading-5">
-                                {node.name}
-                              </h3>
+                              <div className="min-w-0 flex-1 pt-0.5">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <h3 className="font-semibold text-foreground truncate text-sm leading-5">
+                                    {node.name}
+                                  </h3>
+                                  <span
+                                    className={`h-2.5 w-2.5 rounded-full flex-shrink-0 ${connectionStatusMeta.color === "success" ? "bg-emerald-500" : "bg-rose-500"}`}
+                                    title={connectionStatusMeta.text}
+                                  />
+                                </div>
+                              </div>
                             </div>
-                            <div className="ml-2 flex max-w-[58%] flex-wrap items-center justify-end gap-1.5 self-start">
-                              {isRemoteNode && (
-                                <Chip
-                                  className="text-[10px] h-5 px-1 flex-shrink-0"
-                                  color="secondary"
-                                  size="sm"
-                                  variant="flat"
-                                >
-                                  远程
-                                </Chip>
-                              )}
-                              {(() => {
-                                const connectionStatusMeta =
-                                  getConnectionStatusMeta(
-                                    node.connectionStatus,
-                                  );
+                            <div className="ml-2 flex-shrink-0 self-start">
+                              <details className="relative">
+                                <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded-full border border-divider/80 bg-background/95 px-2.5 py-1 text-[11px] font-medium text-default-600 shadow-sm transition hover:border-default-300 hover:text-foreground [&::-webkit-details-marker]:hidden">
+                                  <span>信息</span>
+                                  <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-default-100 px-1 text-[10px] text-default-500">
+                                    {metaCount}
+                                  </span>
+                                  <svg
+                                    aria-hidden="true"
+                                    className="h-3 w-3"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      d="M19 9l-7 7-7-7"
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth={2}
+                                    />
+                                  </svg>
+                                </summary>
+                                <div className="absolute right-0 top-full z-30 mt-2 w-[min(19rem,calc(100vw-3rem))] rounded-xl border border-divider/80 bg-background/95 p-3 shadow-xl backdrop-blur">
+                                  <div className="space-y-3">
+                                    <div className="space-y-2">
+                                      <div className="text-[11px] font-medium text-default-500">
+                                        标签
+                                      </div>
+                                      <div className="flex flex-wrap gap-1.5">
+                                        {isRemoteNode && (
+                                          <Chip
+                                            className="text-[10px] h-5 px-1 flex-shrink-0"
+                                            color="secondary"
+                                            size="sm"
+                                            variant="flat"
+                                          >
+                                            远程
+                                          </Chip>
+                                        )}
+                                        <Chip
+                                          className="text-[10px] h-5 px-1"
+                                          color={connectionStatusMeta.color}
+                                          size="sm"
+                                          variant="flat"
+                                        >
+                                          {connectionStatusMeta.text}
+                                        </Chip>
+                                        {node.expiryTime &&
+                                          node.expiryTime > 0 &&
+                                          node.renewalCycle && (
+                                            <Chip
+                                              className="text-[10px] h-5 px-1 flex-shrink-0"
+                                              color={expiryMeta.tone}
+                                              size="sm"
+                                              title={`${formatNodeRenewalTime(expiryMeta.nextDueTime)} (${getNodeRenewalCycleLabel(node.renewalCycle)})`}
+                                              variant="flat"
+                                            >
+                                              {expiryMeta.label}
+                                            </Chip>
+                                          )}
+                                      </div>
+                                    </div>
 
-                                return (
-                                  <Chip
-                                    className="text-[10px] h-5 px-1"
-                                    color={connectionStatusMeta.color}
-                                    size="sm"
-                                    variant="flat"
-                                  >
-                                    {connectionStatusMeta.text}
-                                  </Chip>
-                                );
-                              })()}
-                              {node.expiryTime &&
-                                node.expiryTime > 0 &&
-                                node.renewalCycle && (
-                                  <Chip
-                                    className="text-[10px] h-5 px-1 flex-shrink-0"
-                                    color={expiryMeta.tone}
-                                    size="sm"
-                                    title={`${formatNodeRenewalTime(expiryMeta.nextDueTime)} (${getNodeRenewalCycleLabel(node.renewalCycle)})`}
-                                    variant="flat"
-                                  >
-                                    {expiryMeta.label}
-                                  </Chip>
-                                )}
+                                    {hasRemark && (
+                                      <div className="space-y-2">
+                                        <div className="text-[11px] font-medium text-default-500">
+                                          备注
+                                        </div>
+                                        <div
+                                          className="max-h-32 overflow-y-auto rounded-lg border border-divider/80 bg-default-50/80 px-3 py-2 text-xs leading-5 text-default-700 break-all [scrollbar-width:thin]"
+                                          title={node.remark?.trim()}
+                                        >
+                                          {node.remark?.trim()}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              </details>
                             </div>
                           </div>
                         </CardHeader>
@@ -2051,14 +2108,6 @@ export default function NodePage() {
                           )}
 
                           <div className="mt-auto space-y-3">
-                            {node.remark?.trim() && (
-                              <div className="rounded-md border border-divider/80 bg-default-50/80 px-2.5 py-2.5 text-xs leading-5 text-default-700 break-all">
-                                <div title={node.remark.trim()}>
-                                  {node.remark.trim()}
-                                </div>
-                              </div>
-                            )}
-
                             {/* 操作按钮 */}
                             <div className="space-y-1.5">
                               {!isRemoteNode && (
