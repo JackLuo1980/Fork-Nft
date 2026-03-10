@@ -388,10 +388,20 @@ export default function NodePage() {
       }
 
       const rect = triggerElement.getBoundingClientRect();
+      const cardElement = triggerElement.closest("[data-node-card='true']");
+      const cardRect =
+        cardElement instanceof HTMLElement
+          ? cardElement.getBoundingClientRect()
+          : null;
       const estimatedPanelWidth = 288;
-      const viewportPadding = 24;
+      const containerPadding = 16;
+      const availableLeftSpace = cardRect
+        ? rect.left - cardRect.left
+        : rect.left;
       const nextPlacement: "left" | "bottom" =
-        rect.left >= estimatedPanelWidth + viewportPadding ? "left" : "bottom";
+        availableLeftSpace >= estimatedPanelWidth + containerPadding
+          ? "left"
+          : "bottom";
 
       setInfoPopoverPlacement((prev) =>
         prev[nodeId] === nextPlacement
@@ -1689,6 +1699,7 @@ export default function NodePage() {
                   <SortableItem key={node.id} id={node.id}>
                     {(listeners) => (
                       <Card
+                        data-node-card="true"
                         key={node.id}
                         className={`group relative overflow-visible shadow-sm border border-divider hover:shadow-md transition-shadow duration-200 h-full flex flex-col ${expiryMeta.accentClassName}`}
                       >
