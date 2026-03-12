@@ -325,11 +325,6 @@ export default function TunnelPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const editingTunnel = useMemo(
-    () => tunnels.find((item) => item.id === form.id) || null,
-    [form.id, tunnels],
-  );
-
   // 新增隧道
   const handleAdd = () => {
     setIsEdit(false);
