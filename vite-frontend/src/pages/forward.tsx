@@ -823,10 +823,7 @@ const SortableTableRow = ({
           {formatFlow(getForwardDisplayFlow(forward))}
         </span>
       </TableCell>
-      <TableCell
-        className={`${FORWARD_GROUPED_TABLE_COLUMN_CLASS.status} cursor-pointer hover:underline text-primary font-bold`}
-        onClick={() => copyToClipboard(forward.inPort.toString(), "入口端口")}
-      >
+      <TableCell className={FORWARD_GROUPED_TABLE_COLUMN_CLASS.status}>
         <div className="flex items-center gap-2.5 whitespace-nowrap">
           <Switch
             color="success"
