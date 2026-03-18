@@ -271,7 +271,6 @@ type MetricType =
   | "network"
   | "load"
   | "connections";
-type TunnelMetricType = "traffic";
 
 const METRICS_MAX_ROWS = 5000;
 
@@ -297,24 +296,22 @@ export function MonitorView({ nodeMap }: MonitorViewProps) {
 
   const [tunnels, setTunnels] = useState<MonitorTunnelApiItem[]>([]);
   const [tunnelsLoading, setTunnelsLoading] = useState(false);
-  const [tunnelsError, setTunnelsError] = useState<string | null>(null);
+  const [, setTunnelsError] = useState<string | null>(null);
   const [selectedTunnelId, setSelectedTunnelId] = useState<number | null>(null);
   const [tunnelMetrics, setTunnelMetrics] = useState<TunnelMetricApiItem[]>([]);
   const [tunnelMetricsLoading, setTunnelMetricsLoading] = useState(false);
-  const [tunnelMetricsTruncated, setTunnelMetricsTruncated] = useState(false);
+  const [, setTunnelMetricsTruncated] = useState(false);
   const [tunnelMetricsError, setTunnelMetricsError] = useState<string | null>(
     null,
   );
   const [tunnelRangeMs, setTunnelRangeMs] = useState(60 * 60 * 1000);
-  const [activeTunnelMetricType, setActiveTunnelMetricType] =
-    useState<TunnelMetricType>("traffic");
 
   const [serviceMonitors, setServiceMonitors] = useState<
     ServiceMonitorApiItem[]
   >([]);
   const [monitorsLoading, setMonitorsLoading] = useState(false);
-  const [monitorsError, setMonitorsError] = useState<string | null>(null);
-  const [latestResultsError, setLatestResultsError] = useState<string | null>(
+  const [, setMonitorsError] = useState<string | null>(null);
+  const [, setLatestResultsError] = useState<string | null>(
     null,
   );
   const [monitorResults, setMonitorResults] = useState<
@@ -1029,15 +1026,6 @@ export function MonitorView({ nodeMap }: MonitorViewProps) {
       : null;
   const modalResults =
     resultsMonitorId != null ? monitorResults[resultsMonitorId] || [] : [];
-
-  const selectedRealtimeMetric =
-    selectedNodeId != null ? realtimeNodeMetrics[selectedNodeId] || null : null;
-  const latestPersistedNodeTs =
-    metrics.length > 0 ? metrics[metrics.length - 1]?.timestamp : null;
-  const latestPersistedTunnelTs =
-    tunnelMetrics.length > 0
-      ? tunnelMetrics[tunnelMetrics.length - 1]?.timestamp
-      : null;
 
   const resolveMonitorIntervalSec = useCallback(
     (monitor: ServiceMonitorApiItem) => {
