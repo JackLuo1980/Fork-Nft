@@ -802,6 +802,13 @@ func (w *WebSocketReporter) routeCommand(cmd CommandMessage) {
 		response.Type = "DeleteLimitersResponse"
 		needSaveConfig = true
 
+	// Forward engine command (read/write external state files, no gost.json save)
+	case "ApplyPortForwards":
+		var applyResult *ForwardApplyResult
+		applyResult, err = w.handleApplyPortForwards(cmd.Data)
+		response.Type = "ApplyPortForwardsResponse"
+		response.Data = applyResult
+
 	// TCP Ping 诊断命令（只读，不需要保存配置）
 	case "TcpPing":
 		var tcpPingResult TcpPingResponse
@@ -1086,6 +1093,34 @@ func (w *WebSocketReporter) handleDeleteLimiter(data interface{}) error {
 	}
 
 	return deleteLimiter(deleteReq)
+}
+
+func (w *WebSocketReporter) handleApplyPortForwards(data interface{}) (*ForwardApplyResult, error) {
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return nil, fmt.Errorf("序列化数据失败: %v", err)
+	}
+
+	var req struct {
+		Engine      string            `json:"engine"`
+		DryRun      bool              `json:"dryRun"`
+		AllowShrink bool              `json:"allowShrink"`
+		Forwards    []ForwardPortRule `json:"forwards"`
+	}
+	if err := json.Unmarshal(jsonData, &req); err != nil {
+		return nil, fmt.Errorf("解析转发请求失败: %v", err)
+	}
+
+	engineName := resolveForwardEngineName(req.Engine)
+	manager := defaultForwardEngineManager()
+	applyReq := ForwardApplyRequest{
+		AllowShrink: req.AllowShrink,
+		Forwards:    req.Forwards,
+	}
+	if req.DryRun {
+		return manager.DryRun(context.Background(), engineName, applyReq)
+	}
+	return manager.Apply(context.Background(), engineName, applyReq)
 }
 
 // handleSetProtocol 处理设置屏蔽协议的命令
