@@ -35,3 +35,18 @@ No production rollout unless all gates pass.
 - All automated tests green in CI.
 - Canary node runs 72h without critical incidents.
 - Rollback tested and documented.
+
+## Remote Engine E2E Command
+Use this script to validate the full path on a remote dev server:
+- Panel forward engine selection
+- Backend persistence
+- Runtime `UpdateService` payload including `forwarder.engine`
+
+Command:
+```bash
+scripts/e2e-engine-check.sh --host <server_ip> --password '<root_password>'
+```
+
+Notes:
+- Default behavior restores backend image to base compose config after check.
+- Use `--keep-fork-backend` to keep backend on fork test image.
