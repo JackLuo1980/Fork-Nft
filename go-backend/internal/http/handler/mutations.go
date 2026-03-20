@@ -1629,7 +1629,9 @@ func (h *Handler) forwardCreate(w http.ResponseWriter, r *http.Request) {
 	if userName == "" {
 		userName = "user"
 	}
-	forwardID, err := h.repo.CreateForwardTx(userID, userName, name, tunnelID, remoteAddr, defaultString(asString(req["strategy"]), "fifo"), now, inx, entryNodes, port, inIp, nullableInt(speedID))
+	strategy := defaultString(strings.TrimSpace(asString(req["strategy"])), "fifo")
+	engine := normalizeForwardEngine(asString(req["engine"]))
+	forwardID, err := h.repo.CreateForwardTx(userID, userName, name, tunnelID, remoteAddr, strategy, engine, now, inx, entryNodes, port, inIp, nullableInt(speedID))
 	if err != nil {
 		response.WriteJSON(w, response.Err(-2, err.Error()))
 		return
@@ -1704,6 +1706,10 @@ func (h *Handler) forwardUpdate(w http.ResponseWriter, r *http.Request) {
 	if strategy == "" {
 		strategy = forward.Strategy
 	}
+	engine := normalizeForwardEngine(forward.Engine)
+	if rawEngine, ok := req["engine"]; ok {
+		engine = normalizeForwardEngine(asString(rawEngine))
+	}
 	rawSpeedID, hasSpeedID := req["speedId"]
 	requestedSpeedID := asAnyToInt64Ptr(rawSpeedID)
 	if actorRole != 0 && hasSpeedID && requestedSpeedID != nil && !sameSpeedLimitSelection(forward.SpeedID, requestedSpeedID) {
@@ -1774,7 +1780,7 @@ func (h *Handler) forwardUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	now := time.Now().UnixMilli()
-	if err := h.repo.UpdateForward(id, name, tunnelID, remoteAddr, strategy, now, newSpeedID); err != nil {
+	if err := h.repo.UpdateForward(id, name, tunnelID, remoteAddr, strategy, engine, now, newSpeedID); err != nil {
 		response.WriteJSON(w, response.Err(-2, err.Error()))
 		return
 	}
@@ -3746,7 +3752,7 @@ func (h *Handler) rollbackForwardMutation(oldForward *forwardRecord, oldPorts []
 
 	h.repo.RollbackForwardFields(
 		oldForward.ID, oldForward.UserID, oldForward.UserName, oldForward.Name,
-		oldForward.TunnelID, oldForward.RemoteAddr, oldForward.Strategy, oldForward.Status,
+		oldForward.TunnelID, oldForward.RemoteAddr, oldForward.Strategy, oldForward.Engine, oldForward.Status,
 		oldForward.SpeedID,
 		time.Now().UnixMilli(),
 	)
@@ -3756,6 +3762,21 @@ func (h *Handler) rollbackForwardMutation(oldForward *forwardRecord, oldPorts []
 	}
 
 	_ = h.syncForwardServices(oldForward, "UpdateService", true)
+}
+
+func normalizeForwardEngine(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", "gost":
+		return "gost"
+	case "auto":
+		return "auto"
+	case "nftables":
+		return "nftables"
+	case "realm":
+		return "realm"
+	default:
+		return "gost"
+	}
 }
 
 func (h *Handler) upsertUserTunnel(req map[string]interface{}) error {

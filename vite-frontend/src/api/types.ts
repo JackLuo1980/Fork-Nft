@@ -65,6 +65,7 @@ export interface ForwardApiItem {
   inIp?: string;
   inPort?: number;
   remoteAddr?: string;
+  engine?: string;
   inFlow?: number;
   outFlow?: number;
   userId?: number;
@@ -365,6 +366,7 @@ export interface ForwardMutationPayload {
   inPort?: number | null;
   remoteAddr?: string;
   strategy?: string;
+  engine?: string;
   speedId?: number | null;
 }
 

@@ -501,6 +501,7 @@ func (r *Repository) GetUserPackageForwards(userID int64) ([]model.UserForwardDe
 		TunnelID   int64
 		TunnelName string
 		RemoteAddr string
+		Engine     string
 		InFlow     int64
 		OutFlow    int64
 		Status     int
@@ -509,7 +510,7 @@ func (r *Repository) GetUserPackageForwards(userID int64) ([]model.UserForwardDe
 
 	var rows []fwdRow
 	err := r.db.Model(&model.Forward{}).
-		Select("forward.id, forward.name, forward.tunnel_id, COALESCE(tunnel.name, '') AS tunnel_name, forward.remote_addr, forward.in_flow, forward.out_flow, forward.status, forward.created_time AS created_at").
+		Select("forward.id, forward.name, forward.tunnel_id, COALESCE(tunnel.name, '') AS tunnel_name, forward.remote_addr, COALESCE(NULLIF(TRIM(forward.engine), ''), 'gost') AS engine, forward.in_flow, forward.out_flow, forward.status, forward.created_time AS created_at").
 		Joins("LEFT JOIN tunnel ON tunnel.id = forward.tunnel_id").
 		Where("forward.user_id = ?", userID).
 		Order("forward.id ASC").
@@ -527,7 +528,7 @@ func (r *Repository) GetUserPackageForwards(userID int64) ([]model.UserForwardDe
 		items = append(items, model.UserForwardDetail{
 			ID: row.ID, Name: row.Name, TunnelID: row.TunnelID,
 			TunnelName: row.TunnelName, InIP: inIP, InPort: inPort,
-			RemoteAddr: row.RemoteAddr, InFlow: row.InFlow, OutFlow: row.OutFlow,
+			RemoteAddr: row.RemoteAddr, Engine: row.Engine, InFlow: row.InFlow, OutFlow: row.OutFlow,
 			Status: row.Status, CreatedAt: row.CreatedAt,
 		})
 	}
@@ -757,6 +758,7 @@ func (r *Repository) ListForwards() ([]map[string]interface{}, error) {
 		TrafficRatio float64
 		RemoteAddr   string
 		Strategy     string
+		Engine       string
 		InFlow       int64
 		OutFlow      int64
 		CreatedTime  int64
@@ -767,7 +769,7 @@ func (r *Repository) ListForwards() ([]map[string]interface{}, error) {
 
 	var rows []fwdRow
 	err := r.db.Model(&model.Forward{}).
-		Select("forward.id, forward.user_id, forward.user_name, forward.name, forward.tunnel_id, COALESCE(tunnel.name, '') AS tunnel_name, COALESCE(tunnel.traffic_ratio, 1.0) AS traffic_ratio, forward.remote_addr, COALESCE(forward.strategy, 'fifo') AS strategy, forward.in_flow, forward.out_flow, forward.created_time, forward.status, forward.inx, forward.speed_id").
+		Select("forward.id, forward.user_id, forward.user_name, forward.name, forward.tunnel_id, COALESCE(tunnel.name, '') AS tunnel_name, COALESCE(tunnel.traffic_ratio, 1.0) AS traffic_ratio, forward.remote_addr, COALESCE(forward.strategy, 'fifo') AS strategy, COALESCE(NULLIF(TRIM(forward.engine), ''), 'gost') AS engine, forward.in_flow, forward.out_flow, forward.created_time, forward.status, forward.inx, forward.speed_id").
 		Joins("LEFT JOIN tunnel ON tunnel.id = forward.tunnel_id").
 		Order("forward.inx ASC, forward.id ASC").
 		Find(&rows).Error
@@ -786,7 +788,7 @@ func (r *Repository) ListForwards() ([]map[string]interface{}, error) {
 			"name": row.Name, "tunnelId": row.TunnelID, "tunnelName": row.TunnelName,
 			"tunnelTrafficRatio": row.TrafficRatio,
 			"inIp":               nullableForwardIngress(inIP), "inPort": nullableInt64(inPort),
-			"remoteAddr": row.RemoteAddr, "strategy": row.Strategy,
+			"remoteAddr": row.RemoteAddr, "strategy": row.Strategy, "engine": row.Engine,
 			"inFlow": row.InFlow, "outFlow": row.OutFlow,
 			"createdTime": row.CreatedTime, "status": row.Status, "inx": int64(row.Inx),
 		}
@@ -1978,7 +1980,7 @@ func (r *Repository) exportForwards() ([]model.ForwardBackup, error) {
 	for _, f := range forwards {
 		b := model.ForwardBackup{
 			ID: f.ID, UserID: f.UserID, UserName: f.UserName, Name: f.Name,
-			TunnelID: f.TunnelID, RemoteAddr: f.RemoteAddr, Strategy: f.Strategy,
+			TunnelID: f.TunnelID, RemoteAddr: f.RemoteAddr, Strategy: f.Strategy, Engine: f.Engine,
 			InFlow: f.InFlow, OutFlow: f.OutFlow, CreatedTime: f.CreatedTime,
 			UpdatedTime: f.UpdatedTime, Status: f.Status, Inx: f.Inx,
 		}
@@ -2364,6 +2366,10 @@ func importTunnels(tx *gorm.DB, tunnels []model.TunnelBackup, now int64) (int, e
 func importForwards(tx *gorm.DB, forwards []model.ForwardBackup, now int64) (int, error) {
 	count := 0
 	for _, f := range forwards {
+		engine := strings.TrimSpace(f.Engine)
+		if engine == "" {
+			engine = "gost"
+		}
 		item := model.Forward{
 			ID:          f.ID,
 			UserID:      f.UserID,
@@ -2372,6 +2378,7 @@ func importForwards(tx *gorm.DB, forwards []model.ForwardBackup, now int64) (int
 			TunnelID:    f.TunnelID,
 			RemoteAddr:  f.RemoteAddr,
 			Strategy:    f.Strategy,
+			Engine:      engine,
 			InFlow:      f.InFlow,
 			OutFlow:     f.OutFlow,
 			CreatedTime: f.CreatedTime,
@@ -2382,7 +2389,7 @@ func importForwards(tx *gorm.DB, forwards []model.ForwardBackup, now int64) (int
 		err := tx.Clauses(clause.OnConflict{
 			Columns: []clause.Column{{Name: "id"}},
 			DoUpdates: clause.AssignmentColumns([]string{
-				"user_id", "user_name", "name", "tunnel_id", "remote_addr", "strategy",
+				"user_id", "user_name", "name", "tunnel_id", "remote_addr", "strategy", "engine",
 				"in_flow", "out_flow", "updated_time", "status", "inx",
 			}),
 		}).Create(&item).Error
@@ -2716,7 +2723,7 @@ func (r *Repository) GetUserTunnelByID(id int64) (*model.UserTunnel, error) {
 
 // ─── Migration ───────────────────────────────────────────────────────
 
-const currentSchemaVersion = 6
+const currentSchemaVersion = 7
 
 var ensurePostgresIDDefaultsFn = ensurePostgresIDDefaults
 var migrateViteConfigValueColumnTypeFn = migrateViteConfigValueColumnType
@@ -2772,6 +2779,18 @@ func migrateSchema(db *gorm.DB) error {
 	}
 	if err := normalizeStrategy(&model.PeerShareRuntime{}, "peer_share_runtime", "round"); err != nil {
 		return err
+	}
+
+	// Normalize forward.engine values.
+	if err := db.Model(&model.Forward{}).
+		Where("engine IS NULL OR TRIM(engine) = ''").
+		Update("engine", "gost").Error; err != nil {
+		msg := strings.ToLower(err.Error())
+		if !strings.Contains(msg, "no such table") &&
+			!(strings.Contains(msg, "relation") && strings.Contains(msg, "does not exist")) &&
+			!(strings.Contains(msg, "no such column") || (strings.Contains(msg, "column") && strings.Contains(msg, "does not exist"))) {
+			return fmt.Errorf("normalize forward.engine: %w", err)
+		}
 	}
 
 	if ver < 3 {

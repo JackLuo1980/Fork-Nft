@@ -975,6 +975,7 @@ func (h *Handler) userPackage(w http.ResponseWriter, r *http.Request) {
 			"inIp":        f.InIP,
 			"inPort":      nil,
 			"remoteAddr":  f.RemoteAddr,
+			"engine":      f.Engine,
 			"inFlow":      f.InFlow,
 			"outFlow":     f.OutFlow,
 			"status":      f.Status,

@@ -113,6 +113,7 @@ interface Forward {
   remoteAddr: string;
   interfaceName?: string;
   strategy: string;
+  engine: string;
   status: number;
   inFlow: number;
   outFlow: number;
@@ -156,6 +157,7 @@ interface ForwardForm {
   remoteAddr: string;
   interfaceName?: string;
   strategy: string;
+  engine: string;
   speedId: number | null;
 }
 
@@ -560,6 +562,7 @@ const mapForwardApiItems = (items: ForwardApiItem[]): Forward[] => {
     inPort: forward.inPort ?? 0,
     remoteAddr: forward.remoteAddr || "",
     strategy: typeof forward.strategy === "string" ? forward.strategy : "fifo",
+    engine: typeof forward.engine === "string" ? forward.engine : "gost",
     status: typeof forward.status === "number" ? forward.status : 0,
     inFlow: forward.inFlow ?? 0,
     outFlow: forward.outFlow ?? 0,
@@ -1301,6 +1304,7 @@ export default function ForwardPage() {
     remoteAddr: "",
     interfaceName: "",
     strategy: "fifo",
+    engine: "gost",
     speedId: null,
   });
   const [inIpTouched, setInIpTouched] = useState(false);
@@ -2088,6 +2092,7 @@ export default function ForwardPage() {
       remoteAddr: "",
       interfaceName: "",
       strategy: "fifo",
+      engine: "gost",
       speedId: null,
     });
     setErrors({});
@@ -2108,6 +2113,7 @@ export default function ForwardPage() {
       remoteAddr: forward.remoteAddr.split(",").join("\n"),
       interfaceName: forward.interfaceName || "",
       strategy: forward.strategy || "fifo",
+      engine: forward.engine || "gost",
       speedId: normalizeSpeedId(forward.speedId),
     });
     setErrors({});
@@ -2236,6 +2242,7 @@ export default function ForwardPage() {
           ...(inIpTouched ? { inIp: form.inIp || "" } : {}),
           remoteAddr: processedRemoteAddr,
           strategy: addressCount > 1 ? form.strategy : "fifo",
+          engine: form.engine || "gost",
           speedId: normalizedSpeedId,
         };
 
@@ -2248,6 +2255,7 @@ export default function ForwardPage() {
           inIp: form.inIp || undefined,
           remoteAddr: processedRemoteAddr,
           strategy: addressCount > 1 ? form.strategy : "fifo",
+          engine: form.engine || "gost",
           speedId: normalizedSpeedId,
         };
 
@@ -4866,6 +4874,28 @@ export default function ForwardPage() {
                       }))
                     }
                   />
+
+                  <Select
+                    description="选择转发服务的下发引擎"
+                    label="转发引擎"
+                    selectedKeys={[form.engine || "gost"]}
+                    variant="bordered"
+                    onSelectionChange={(keys) => {
+                      const selectedKey = Array.from(keys)[0] as
+                        | string
+                        | undefined;
+
+                      setForm((prev) => ({
+                        ...prev,
+                        engine: selectedKey || "gost",
+                      }));
+                    }}
+                  >
+                    <SelectItem key="gost">Gost（内置）</SelectItem>
+                    <SelectItem key="auto">Auto（自动选择）</SelectItem>
+                    <SelectItem key="nftables">nftables</SelectItem>
+                    <SelectItem key="realm">realm</SelectItem>
+                  </Select>
 
                   {getAddressCount(form.remoteAddr) > 1 && (
                     <Select

@@ -666,7 +666,7 @@ func (r *Repository) GetMinForwardPort(forwardID int64) sql.NullInt64 {
 	return p
 }
 
-func (r *Repository) UpdateForward(id int64, name string, tunnelID int64, remoteAddr, strategy string, now int64, speedID interface{}) error {
+func (r *Repository) UpdateForward(id int64, name string, tunnelID int64, remoteAddr, strategy, engine string, now int64, speedID interface{}) error {
 	if r == nil || r.db == nil {
 		return errors.New("repository not initialized")
 	}
@@ -677,6 +677,7 @@ func (r *Repository) UpdateForward(id int64, name string, tunnelID int64, remote
 			"tunnel_id":    tunnelID,
 			"remote_addr":  remoteAddr,
 			"strategy":     strategy,
+			"engine":       engine,
 			"speed_id":     nullInt64FromInterface(speedID),
 			"updated_time": now,
 		}).Error
@@ -752,7 +753,7 @@ func (r *Repository) UpdateForwardPortBindIP(forwardID, nodeID int64, port int, 
 		Update("in_ip", sql.NullString{String: inIP, Valid: strings.TrimSpace(inIP) != ""}).Error
 }
 
-func (r *Repository) RollbackForwardFields(id, userID int64, userName, name string, tunnelID int64, remoteAddr, strategy string, status int, speedID interface{}, now int64) {
+func (r *Repository) RollbackForwardFields(id, userID int64, userName, name string, tunnelID int64, remoteAddr, strategy, engine string, status int, speedID interface{}, now int64) {
 	if r == nil || r.db == nil {
 		return
 	}
@@ -765,6 +766,7 @@ func (r *Repository) RollbackForwardFields(id, userID int64, userName, name stri
 			"tunnel_id":    tunnelID,
 			"remote_addr":  remoteAddr,
 			"strategy":     strategy,
+			"engine":       engine,
 			"status":       status,
 			"speed_id":     nullInt64FromInterface(speedID),
 			"updated_time": now,
@@ -1209,7 +1211,7 @@ func (r *Repository) EnsureUserTunnelGrant(userID, tunnelID int64) (int64, bool,
 	return ut.ID, true, nil
 }
 
-func (r *Repository) CreateForwardTx(userID int64, userName, name string, tunnelID int64, remoteAddr, strategy string, now int64, inx int, entryNodeIDs []int64, port int, inIp string, speedID interface{}) (int64, error) {
+func (r *Repository) CreateForwardTx(userID int64, userName, name string, tunnelID int64, remoteAddr, strategy, engine string, now int64, inx int, entryNodeIDs []int64, port int, inIp string, speedID interface{}) (int64, error) {
 	if r == nil || r.db == nil {
 		return 0, errors.New("repository not initialized")
 	}
@@ -1222,6 +1224,7 @@ func (r *Repository) CreateForwardTx(userID int64, userName, name string, tunnel
 			TunnelID:    tunnelID,
 			RemoteAddr:  remoteAddr,
 			Strategy:    strategy,
+			Engine:      engine,
 			InFlow:      0,
 			OutFlow:     0,
 			CreatedTime: now,

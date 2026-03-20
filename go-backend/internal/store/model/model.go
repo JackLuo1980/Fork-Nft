@@ -36,6 +36,7 @@ type Forward struct {
 	TunnelID    int64         `gorm:"column:tunnel_id;not null"`
 	RemoteAddr  string        `gorm:"column:remote_addr;type:text;not null"`
 	Strategy    string        `gorm:"type:varchar(100);not null;default:'fifo'"`
+	Engine      string        `gorm:"type:varchar(20);not null;default:'gost'"`
 	InFlow      int64         `gorm:"not null;default:0"`
 	OutFlow     int64         `gorm:"column:out_flow;not null;default:0"`
 	CreatedTime int64         `gorm:"column:created_time;not null"`
@@ -432,6 +433,7 @@ type ForwardBackup struct {
 	TunnelID     int64                `json:"tunnelId"`
 	RemoteAddr   string               `json:"remoteAddr"`
 	Strategy     string               `json:"strategy"`
+	Engine       string               `json:"engine,omitempty"`
 	InFlow       int64                `json:"inFlow"`
 	OutFlow      int64                `json:"outFlow"`
 	CreatedTime  int64                `json:"createdTime"`
@@ -535,6 +537,7 @@ type ForwardRecord struct {
 	TunnelID   int64
 	RemoteAddr string
 	Strategy   string
+	Engine     string
 	Status     int
 	SpeedID    sql.NullInt64
 }
@@ -646,6 +649,7 @@ type UserForwardDetail struct {
 	InIP       string
 	InPort     sql.NullInt64
 	RemoteAddr string
+	Engine     string
 	InFlow     int64
 	OutFlow    int64
 	Status     int
