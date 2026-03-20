@@ -178,6 +178,21 @@ journalctl -u nft-flow-exporter.service -n 50 --no-pager
 - 如果后端不是 Fork 版本，`engine` 字段可能无法按预期持久化；建议使用“源码构建部署”或确认后端镜像版本。
 - `panel_install.sh/install.sh` 仍基于 FLVX 发布仓库；Fork 特性验证建议使用源码镜像方式。
 
+## 节点引擎白名单（避免误用 gost）
+
+可在节点 `flux_agent` 服务上设置：
+
+```bash
+FORKNFT_ALLOWED_ENGINES=nftables,realm,auto
+FORKNFT_FORWARD_ENGINE=auto
+```
+
+说明：
+
+- `FORKNFT_ALLOWED_ENGINES`：节点允许执行的引擎列表（逗号分隔）；未包含的引擎会被节点拒绝。
+- `FORKNFT_FORWARD_ENGINE`：当请求未显式传 `engine` 时的默认值（本项目当前默认 `auto`）。
+- 例如要把某台节点锁死为 nft-only：`FORKNFT_ALLOWED_ENGINES=nftables`。
+
 ## Original Project
 
 - Name: `flux-panel`

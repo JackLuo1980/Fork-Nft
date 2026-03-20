@@ -175,9 +175,12 @@ func (n *nftablesAdapter) renderNftConfig(forwards []ForwardPortRule) (string, e
 	b.WriteString("    }\n")
 
 	b.WriteString("    chain forward { type filter hook forward priority 0; policy drop;\n")
+	for i := range forwards {
+		b.WriteString(fmt.Sprintf("        ip saddr $DEST_IP_%d meta l4proto { tcp, udp } th sport $DEST_PORT_%d counter accept\n", i+1, i+1))
+	}
 	b.WriteString("        ct state { established, related } accept\n")
 	for i := range forwards {
-		b.WriteString(fmt.Sprintf("        ip daddr $DEST_IP_%d meta l4proto { tcp, udp } th dport $DEST_PORT_%d accept\n", i+1, i+1))
+		b.WriteString(fmt.Sprintf("        ip daddr $DEST_IP_%d meta l4proto { tcp, udp } th dport $DEST_PORT_%d counter accept\n", i+1, i+1))
 	}
 	b.WriteString("    }\n")
 	b.WriteString("}\n\n")

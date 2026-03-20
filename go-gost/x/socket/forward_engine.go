@@ -62,6 +62,9 @@ func (m *ForwardEngineManager) DryRun(ctx context.Context, engineName string, re
 	if strings.EqualFold(engineName, "auto") {
 		engineName = selectAutoEngineName(req.Forwards)
 	}
+	if !isForwardEngineAllowed(engineName) {
+		return nil, fmt.Errorf("forward engine blocked by node policy: %s", engineName)
+	}
 	engine, ok := m.Get(engineName)
 	if !ok {
 		return nil, fmt.Errorf("forward engine not found: %s", engineName)
@@ -72,6 +75,9 @@ func (m *ForwardEngineManager) DryRun(ctx context.Context, engineName string, re
 func (m *ForwardEngineManager) Apply(ctx context.Context, engineName string, req ForwardApplyRequest) (*ForwardApplyResult, error) {
 	if strings.EqualFold(engineName, "auto") {
 		engineName = selectAutoEngineName(req.Forwards)
+	}
+	if !isForwardEngineAllowed(engineName) {
+		return nil, fmt.Errorf("forward engine blocked by node policy: %s", engineName)
 	}
 	engine, ok := m.Get(engineName)
 	if !ok {
@@ -104,7 +110,7 @@ func resolveForwardEngineName(requestEngine string) string {
 	if env != "" {
 		return env
 	}
-	return "gost"
+	return "auto"
 }
 
 func selectAutoEngineName(forwards []ForwardPortRule) string {
@@ -114,4 +120,21 @@ func selectAutoEngineName(forwards []ForwardPortRule) string {
 		}
 	}
 	return "realm"
+}
+
+func isForwardEngineAllowed(engineName string) bool {
+	engineName = strings.ToLower(strings.TrimSpace(engineName))
+	if engineName == "" {
+		return false
+	}
+	allowedRaw := strings.TrimSpace(os.Getenv("FORKNFT_ALLOWED_ENGINES"))
+	if allowedRaw == "" {
+		return true
+	}
+	for _, part := range strings.Split(allowedRaw, ",") {
+		if strings.ToLower(strings.TrimSpace(part)) == engineName {
+			return true
+		}
+	}
+	return false
 }

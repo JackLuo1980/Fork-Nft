@@ -79,6 +79,37 @@
   - 检查缓存值是否 ≤ 当前 nft counter
   - 检查日志中 `uploaded X flow items` 是否正常
 
+## BUG-20260320-05 新建转发默认落到 `gost`，不符合“避免误用 gost”要求
+
+- 状态：`DONE`
+- 影响：
+  - 新建时若未显式改引擎，配置会默认走 `gost`。
+  - 在禁止 `gost` 的服务器上可能导致下发失败或运行偏离预期。
+- 根因：
+  - 前后端的默认引擎归一化逻辑均以 `gost` 为默认值。
+- 修复：
+  - 前端创建/编辑默认值改为 `auto`，并在表单描述中明确提示“节点禁止 gost 时不要选 gost”。
+  - 后端 `normalizeForwardEngine` 默认值与非法值回退改为 `auto`。
+  - 节点侧 `resolveForwardEngineName` 默认值改为 `auto`。
+- 回归：
+  - `go test ./internal/http/handler -run 'TestNormalizeForwardEngine' -count=1`
+  - `go test ./socket -run 'TestResolveForwardEngineName' -count=1`
+
+## BUG-20260320-06 需要节点级引擎限制，防止某台机误下发 `gost`
+
+- 状态：`DONE`
+- 影响：
+  - 仅靠每条转发人工选择容易误操作，不能保证节点层面策略一致。
+- 根因：
+  - 节点侧此前没有“允许引擎白名单”拦截机制。
+- 修复：
+  - 新增节点环境变量 `FORKNFT_ALLOWED_ENGINES`（逗号分隔白名单）。
+  - 在节点执行 `Apply/DryRun` 前校验引擎是否允许；不允许时直接拒绝执行并返回错误。
+  - 文档补充 nft-only 与“禁用 gost”配置示例。
+- 回归：
+  - `go test ./socket -run 'TestIsForwardEngineAllowed' -count=1`
+  - 线上验证：将 `FORKNFT_ALLOWED_ENGINES` 设为不含 `gost` 后，选择 `gost` 的任务会被节点拒绝。
+
 ## 防漏项（每次发布前执行）
 
 1. 运行 repo/handler/socket 的相关回归测试。

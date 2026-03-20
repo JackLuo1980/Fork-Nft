@@ -1304,7 +1304,7 @@ export default function ForwardPage() {
     remoteAddr: "",
     interfaceName: "",
     strategy: "fifo",
-    engine: "gost",
+    engine: "auto",
     speedId: null,
   });
   const [inIpTouched, setInIpTouched] = useState(false);
@@ -2092,7 +2092,7 @@ export default function ForwardPage() {
       remoteAddr: "",
       interfaceName: "",
       strategy: "fifo",
-      engine: "gost",
+      engine: "auto",
       speedId: null,
     });
     setErrors({});
@@ -2113,7 +2113,7 @@ export default function ForwardPage() {
       remoteAddr: forward.remoteAddr.split(",").join("\n"),
       interfaceName: forward.interfaceName || "",
       strategy: forward.strategy || "fifo",
-      engine: forward.engine || "gost",
+      engine: forward.engine || "auto",
       speedId: normalizeSpeedId(forward.speedId),
     });
     setErrors({});
@@ -2242,7 +2242,7 @@ export default function ForwardPage() {
           ...(inIpTouched ? { inIp: form.inIp || "" } : {}),
           remoteAddr: processedRemoteAddr,
           strategy: addressCount > 1 ? form.strategy : "fifo",
-          engine: form.engine || "gost",
+          engine: form.engine || "auto",
           speedId: normalizedSpeedId,
         };
 
@@ -2255,7 +2255,7 @@ export default function ForwardPage() {
           inIp: form.inIp || undefined,
           remoteAddr: processedRemoteAddr,
           strategy: addressCount > 1 ? form.strategy : "fifo",
-          engine: form.engine || "gost",
+          engine: form.engine || "auto",
           speedId: normalizedSpeedId,
         };
 
@@ -4876,9 +4876,9 @@ export default function ForwardPage() {
                   />
 
                   <Select
-                    description="选择转发服务的下发引擎"
+                    description="必选。默认 Auto（推荐）；若节点禁止 gost，请勿选择 Gost"
                     label="转发引擎"
-                    selectedKeys={[form.engine || "gost"]}
+                    selectedKeys={[form.engine || "auto"]}
                     variant="bordered"
                     onSelectionChange={(keys) => {
                       const selectedKey = Array.from(keys)[0] as
@@ -4887,7 +4887,7 @@ export default function ForwardPage() {
 
                       setForm((prev) => ({
                         ...prev,
-                        engine: selectedKey || "gost",
+                        engine: selectedKey || "auto",
                       }));
                     }}
                   >

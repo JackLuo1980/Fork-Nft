@@ -11,8 +11,8 @@ import (
 
 func TestResolveForwardEngineName(t *testing.T) {
 	t.Setenv("FORKNFT_FORWARD_ENGINE", "")
-	if got := resolveForwardEngineName(""); got != "gost" {
-		t.Fatalf("expected default gost, got %q", got)
+	if got := resolveForwardEngineName(""); got != "auto" {
+		t.Fatalf("expected default auto, got %q", got)
 	}
 
 	t.Setenv("FORKNFT_FORWARD_ENGINE", "nftables")
@@ -22,6 +22,21 @@ func TestResolveForwardEngineName(t *testing.T) {
 
 	if got := resolveForwardEngineName("realm"); got != "realm" {
 		t.Fatalf("expected request realm override, got %q", got)
+	}
+}
+
+func TestIsForwardEngineAllowed(t *testing.T) {
+	t.Setenv("FORKNFT_ALLOWED_ENGINES", "")
+	if !isForwardEngineAllowed("nftables") {
+		t.Fatal("expected nftables allowed when policy is empty")
+	}
+
+	t.Setenv("FORKNFT_ALLOWED_ENGINES", "nftables,auto")
+	if !isForwardEngineAllowed("nftables") {
+		t.Fatal("expected nftables allowed by policy")
+	}
+	if isForwardEngineAllowed("gost") {
+		t.Fatal("expected gost blocked by policy")
 	}
 }
 
@@ -122,6 +137,12 @@ func TestNftablesAdapterRenderIncludesCounters(t *testing.T) {
 	}
 	if !strings.Contains(cfg, "th dport $PORT_IN_1 counter dnat") {
 		t.Fatalf("expected prerouting dnat counter rule, got:\n%s", cfg)
+	}
+	if !strings.Contains(cfg, "th sport $DEST_PORT_1 counter accept") {
+		t.Fatalf("expected reverse traffic counter rule, got:\n%s", cfg)
+	}
+	if !strings.Contains(cfg, "th dport $DEST_PORT_1 counter accept") {
+		t.Fatalf("expected forward traffic counter rule, got:\n%s", cfg)
 	}
 	if !strings.Contains(cfg, "th dport $DEST_PORT_1 counter snat") {
 		t.Fatalf("expected postrouting snat counter rule, got:\n%s", cfg)

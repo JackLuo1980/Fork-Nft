@@ -3766,16 +3766,16 @@ func (h *Handler) rollbackForwardMutation(oldForward *forwardRecord, oldPorts []
 
 func normalizeForwardEngine(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "", "gost":
-		return "gost"
-	case "auto":
+	case "", "auto":
 		return "auto"
+	case "gost":
+		return "gost"
 	case "nftables":
 		return "nftables"
 	case "realm":
 		return "realm"
 	default:
-		return "gost"
+		return "auto"
 	}
 }
 

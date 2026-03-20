@@ -130,6 +130,22 @@ scripts/e2e-engine-check.sh --host <server_ip> --password '<root_password>'
 
 ## 7. 常见问题
 
+### 7.0 节点不允许 gost（推荐）
+
+在节点服务环境变量设置：
+
+```bash
+FORKNFT_ALLOWED_ENGINES=nftables,realm,auto
+FORKNFT_FORWARD_ENGINE=auto
+```
+
+如果要 nft-only：
+
+```bash
+FORKNFT_ALLOWED_ENGINES=nftables
+FORKNFT_FORWARD_ENGINE=nftables
+```
+
 ### 7.1 “部分节点不在线”
 
 创建隧道时报该错误通常是节点 agent 未连上面板。

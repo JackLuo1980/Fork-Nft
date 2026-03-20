@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """
-Export nftables DNAT counter deltas to panel /flow/upload, so nft-only forwarding
-can still update forward traffic statistics.
+Export nftables counter deltas to panel /flow/upload, preserving nft-only forwarding.
+
+Flow source:
+1) ip nat prerouting dnat counters -> map relay_port -> target_ip:target_port
+2) inet filter forward counters:
+   - daddr+ dport counter => upload (client -> target)
+   - saddr+ sport counter => download (target -> client)
 """
 
 from __future__ import annotations
@@ -26,9 +31,6 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--agent-config", default="/etc/flux_agent/config.json")
     p.add_argument("--relay-state", default="/etc/relay-forwards.conf")
     p.add_argument("--cache-file", default="/var/lib/fork-nft/nft-flow-exporter.json")
-    p.add_argument("--nft-family", default="ip")
-    p.add_argument("--nft-table", default="nat")
-    p.add_argument("--nft-chain", default="prerouting")
     p.add_argument("--timeout", type=float, default=8.0)
     return p.parse_args()
 
@@ -125,58 +127,145 @@ def parse_relay_state(path: str) -> list[dict]:
     return entries
 
 
-def load_nft_chain(family: str, table: str, chain: str) -> dict[int, int]:
-    cmd = ["nft", "-j", "list", "chain", family, table, chain]
-    raw = subprocess.check_output(cmd, text=True)
+def nft_list_chain(family: str, table: str, chain: str) -> list[dict]:
+    raw = subprocess.check_output(["nft", "-j", "list", "chain", family, table, chain], text=True)
     doc = json.loads(raw)
-    port_bytes: dict[int, int] = {}
-    for item in doc.get("nftables") or []:
+    return doc.get("nftables") or []
+
+
+def extract_match_port(expr: dict, field: str) -> int | None:
+    match = expr.get("match")
+    if not isinstance(match, dict):
+        return None
+    left = match.get("left") or {}
+    payload = left.get("payload") or {}
+    if payload.get("protocol") != "th" or payload.get("field") != field:
+        return None
+    right = match.get("right")
+    if isinstance(right, int):
+        return right
+    return None
+
+
+def extract_match_ip(expr: dict, key: str) -> str | None:
+    match = expr.get("match")
+    if not isinstance(match, dict):
+        return None
+    left = match.get("left") or {}
+    payload = left.get("payload") or {}
+    if payload.get("protocol") != "ip" or payload.get("field") != key:
+        return None
+    right = match.get("right")
+    if isinstance(right, str):
+        return right.strip()
+    return None
+
+
+def extract_counter_bytes(exprs: list[dict]) -> int | None:
+    for expr in exprs:
+        counter = expr.get("counter")
+        if isinstance(counter, dict):
+            return int(counter.get("bytes") or 0)
+    return None
+
+
+def load_prerouting_map() -> dict[int, dict]:
+    # relay_port -> {"target_ip": str, "target_port": int, "bytes": int}
+    result: dict[int, dict] = {}
+    for item in nft_list_chain("ip", "nat", "prerouting"):
         rule = (item or {}).get("rule")
         if not rule:
             continue
-        dport: int | None = None
-        bytes_count: int | None = None
-        for expr in rule.get("expr") or []:
-            match = expr.get("match")
-            if match:
-                left = match.get("left") or {}
-                payload = left.get("payload") or {}
-                if payload.get("protocol") == "th" and payload.get("field") == "dport":
-                    right = match.get("right")
-                    if isinstance(right, int):
-                        dport = right
-            counter = expr.get("counter")
-            if isinstance(counter, dict):
-                bytes_count = int(counter.get("bytes") or 0)
-        if dport is not None and bytes_count is not None:
-            port_bytes[dport] = bytes_count
-    return port_bytes
+        exprs = rule.get("expr") or []
+        relay_port = None
+        target_ip = None
+        target_port = None
+        bytes_count = extract_counter_bytes(exprs)
+        for expr in exprs:
+            port = extract_match_port(expr, "dport")
+            if port is not None:
+                relay_port = port
+            dnat = expr.get("dnat")
+            if isinstance(dnat, dict):
+                target_ip = str(dnat.get("addr") or "").strip()
+                try:
+                    target_port = int(dnat.get("port") or 0)
+                except (TypeError, ValueError):
+                    target_port = 0
+        if relay_port and target_ip and target_port and bytes_count is not None:
+            result[int(relay_port)] = {
+                "target_ip": target_ip,
+                "target_port": int(target_port),
+                "bytes": int(bytes_count),
+            }
+    return result
+
+
+def load_forward_direction_counters() -> tuple[dict[str, int], dict[str, int]]:
+    # key => "ip:port"
+    up: dict[str, int] = {}
+    down: dict[str, int] = {}
+    for item in nft_list_chain("inet", "filter", "forward"):
+        rule = (item or {}).get("rule")
+        if not rule:
+            continue
+        exprs = rule.get("expr") or []
+        bytes_count = extract_counter_bytes(exprs)
+        if bytes_count is None:
+            continue
+        daddr = None
+        dport = None
+        saddr = None
+        sport = None
+        for expr in exprs:
+            ip = extract_match_ip(expr, "daddr")
+            if ip:
+                daddr = ip
+            ip = extract_match_ip(expr, "saddr")
+            if ip:
+                saddr = ip
+            p = extract_match_port(expr, "dport")
+            if p is not None:
+                dport = p
+            p = extract_match_port(expr, "sport")
+            if p is not None:
+                sport = p
+
+        if daddr and dport:
+            up[f"{daddr}:{dport}"] = int(bytes_count)
+        if saddr and sport:
+            down[f"{saddr}:{sport}"] = int(bytes_count)
+    return up, down
 
 
 def load_cache(path: str) -> dict:
     p = pathlib.Path(path)
     if not p.exists():
-        return {"ports": {}}
+        return {}
     try:
         obj = json.loads(p.read_text(encoding="utf-8"))
-        if not isinstance(obj, dict):
-            return {"ports": {}}
-        ports = obj.get("ports")
-        if not isinstance(ports, dict):
-            obj["ports"] = {}
-        return obj
+        return obj if isinstance(obj, dict) else {}
     except Exception:
-        return {"ports": {}}
+        return {}
 
 
-def save_cache(path: str, ports: dict[int, int]) -> None:
+def save_cache(path: str, prerouting_map: dict[int, dict], up_map: dict[str, int], down_map: dict[str, int]) -> None:
     p = pathlib.Path(path)
     p.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "updated_at": int(time.time()),
-        "ports": {str(k): int(v) for k, v in sorted(ports.items())},
+        "prerouting": {str(k): int(v.get("bytes", 0)) for k, v in sorted(prerouting_map.items())},
+        "forward_up": {k: int(v) for k, v in sorted(up_map.items())},
+        "forward_down": {k: int(v) for k, v in sorted(down_map.items())},
     }
     p.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+
+
+def delta(current: int, previous: int) -> int:
+    if current < previous:
+        return 0
+    d = current - previous
+    return d if d > 0 else 0
 
 
 def upload_flow(base: str, secret: str, items: list[dict], timeout: float) -> None:
@@ -200,38 +289,50 @@ def main() -> int:
         print("no valid relay entries")
         return 1
 
-    current_bytes = load_nft_chain(args.nft_family, args.nft_table, args.nft_chain)
-    if not current_bytes:
-        print("no nft rules with counters found in target chain")
+    prerouting_map = load_prerouting_map()
+    if not prerouting_map:
+        print("no nft prerouting rules with counters found")
         return 2
+    up_map, down_map = load_forward_direction_counters()
 
     cache = load_cache(args.cache_file)
-    prev_ports = cache.get("ports") or {}
+    prev_prerouting = cache.get("prerouting") if isinstance(cache.get("prerouting"), dict) else {}
+    prev_up = cache.get("forward_up") if isinstance(cache.get("forward_up"), dict) else {}
+    prev_down = cache.get("forward_down") if isinstance(cache.get("forward_down"), dict) else {}
 
     items: list[dict] = []
     matched_ports = 0
     for entry in relay_entries:
         name = entry["name"]
         relay_port = int(entry["relay_port"])
-        if relay_port not in current_bytes:
-            continue
-        matched_ports += 1
-        current = int(current_bytes[relay_port])
-        previous = int(prev_ports.get(str(relay_port), current))
-        delta = current - previous
-        if delta <= 0:
-            continue
         service_name = service_by_name.get(name)
         if not service_name:
             continue
-        items.append({"n": service_name, "u": 0, "d": int(delta)})
+        pr = prerouting_map.get(relay_port)
+        if not pr:
+            continue
+        matched_ports += 1
+        target_key = f"{pr['target_ip']}:{pr['target_port']}"
 
-    save_cache(args.cache_file, current_bytes)
+        current_up = int(up_map.get(target_key, 0))
+        current_down = int(down_map.get(target_key, 0))
+        current_pr = int(pr.get("bytes", 0))
+
+        d_up = delta(current_up, int(prev_up.get(target_key, current_up)))
+        d_down = delta(current_down, int(prev_down.get(target_key, current_down)))
+        # Fallback: if forward-chain counters absent, keep at least one-direction visibility.
+        if d_up == 0 and d_down == 0:
+            d_up = delta(current_pr, int(prev_prerouting.get(str(relay_port), current_pr)))
+
+        if d_up <= 0 and d_down <= 0:
+            continue
+        items.append({"n": service_name, "u": int(d_up), "d": int(d_down)})
+
+    save_cache(args.cache_file, prerouting_map, up_map, down_map)
 
     if matched_ports == 0:
-        print("no relay ports matched nft counter rules (check dport and chain)")
+        print("no relay ports matched nft prerouting counters")
         return 2
-
     if not items:
         print("no delta to upload")
         return 0
