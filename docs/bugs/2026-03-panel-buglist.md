@@ -52,12 +52,41 @@
   - `go test ./socket -run 'TestNftablesAdapterRenderIncludesCounters|TestNftablesAdapterApplyBlocksUnintendedShrink' -count=1`
   - `python3 -m py_compile scripts/nft-flow-exporter.py`
 
+## BUG-20260320-04 nft 流量统计不准确（缓存失效）
+
+- 状态：`DONE`
+- 发现时间：2026-03-20 13:40
+- 影响：
+  - 面板显示流量（100 KB）与实际 nft counter（218 KB）不一致。
+  - 用户反馈"红色框的部分和实际使用的流量对不上"。
+- 根因：
+  - nft 规则重置后 counter 归零，但缓存文件保留旧值。
+  - delta = current - previous ≤ 0，流量导出器认为"无新流量"。
+- 数据对比：
+  | 端口 | 转发 | nft counter | 数据库 inFlow | 差异 |
+  |------|------|-------------|---------------|------|
+  | 31000 | JP-CO | 137,541 B | 62,396 B | 75,145 B |
+  | 31001 | HK-Jinx | 85,019 B | 27,659 B | 57,360 B |
+  | 12071 | Boil HKT | 512 B | 512 B | 0 B |
+- 修复：
+  - 删除缓存文件：`rm -f /var/lib/fork-nft/nft-flow-exporter.json`
+  - 缓存自动重新初始化为当前 nft counter 值
+  - 流量导出器恢复正常上报
+- 预防措施：
+  - 重新部署 nft 规则或重启节点时，必须删除缓存文件
+  - 添加到 `install-nft-flow-exporter.sh` 的部署检查清单
+- 回归：
+  - 检查缓存值是否 ≤ 当前 nft counter
+  - 检查日志中 `uploaded X flow items` 是否正常
+
 ## 防漏项（每次发布前执行）
 
 1. 运行 repo/handler/socket 的相关回归测试。
 2. 执行 `./tests/scripts/test_sync_po0_forwards.sh`。
 3. 若使用 nft 模式，确认规则包含 `counter` 且 `nft-flow-exporter.timer` 为 active。
-4. 线上抽样核对：
+4. **新增**：确认缓存文件值 ≤ 当前 nft counter 值。
+5. 线上抽样核对：
    - 转发映射（`inPort` / `remoteAddr`）
    - 诊断结果
-   - 流量增长（`forward.list` 的 `inFlow/outFlow`）。
+   - 流量增长（`forward.list` 的 `inFlow/outFlow`）
+   - **新增**：缓存文件与 nft counter 的一致性
