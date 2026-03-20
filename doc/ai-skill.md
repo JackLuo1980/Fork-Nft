@@ -21,7 +21,7 @@ mkdir -p ~/.agents/skills
 ln -sf $(pwd)/skills/flvx-api ~/.agents/skills/
 
 # 或从 GitHub
-git clone https://github.com/Sagit-chu/flvx.git
+git clone https://github.com/JackLuo1980/Fork-Nft.git
 cd flvx
 ln -sf $(pwd)/skills/flvx-api ~/.agents/skills/
 ```

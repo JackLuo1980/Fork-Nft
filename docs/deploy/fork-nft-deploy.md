@@ -22,10 +22,10 @@
 
 ```bash
 # panel
-curl -L https://raw.githubusercontent.com/Sagit-chu/flux-panel/main/panel_install.sh -o panel_install.sh && chmod +x panel_install.sh && ./panel_install.sh
+curl -L https://raw.githubusercontent.com/JackLuo1980/Fork-Nft/main/panel_install.sh -o panel_install.sh && chmod +x panel_install.sh && ./panel_install.sh
 
 # node
-curl -L https://raw.githubusercontent.com/Sagit-chu/flux-panel/main/install.sh -o install.sh && chmod +x install.sh && ./install.sh
+curl -L https://raw.githubusercontent.com/JackLuo1980/Fork-Nft/main/install.sh -o install.sh && chmod +x install.sh && ./install.sh
 ```
 
 ### 模式 B：Fork 源码镜像（推荐）

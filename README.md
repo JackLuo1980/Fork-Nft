@@ -60,13 +60,13 @@
 面板端：
 
 ```bash
-curl -L https://raw.githubusercontent.com/Sagit-chu/flux-panel/main/panel_install.sh -o panel_install.sh && chmod +x panel_install.sh && ./panel_install.sh
+curl -L https://raw.githubusercontent.com/JackLuo1980/Fork-Nft/main/panel_install.sh -o panel_install.sh && chmod +x panel_install.sh && ./panel_install.sh
 ```
 
 节点端：
 
 ```bash
-curl -L https://raw.githubusercontent.com/Sagit-chu/flux-panel/main/install.sh -o install.sh && chmod +x install.sh && ./install.sh
+curl -L https://raw.githubusercontent.com/JackLuo1980/Fork-Nft/main/install.sh -o install.sh && chmod +x install.sh && ./install.sh
 ```
 
 ### 方式 B：源码构建部署（推荐用于 Fork 功能验证）
