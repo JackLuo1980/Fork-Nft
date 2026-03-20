@@ -1,190 +1,166 @@
-# FLVX
+# Fork-Nft (FLVX)
 
-> **联系我们**: [Telegram群组](https://t.me/flvxpanel)
+> FLVX 的通用转发面板分支，面向 `nftables / realm` 多引擎场景，并兼容现有面板管理体验。
 
+## 项目定位
 
-## 特性
+`Fork-Nft` 不是只针对 PO0 的私有脚本仓库，而是一个可开源复用的中转管理项目：
 
-- 支持按 **隧道账号级别** 管理流量转发数量，可用于用户/隧道配额控制
-- 支持 **TCP** 和 **UDP** 协议的转发
-- 支持两种转发模式：**端口转发** 与 **隧道转发**
-- 可针对 **指定用户的指定隧道进行限速** 设置
-- 支持配置 **单向或双向流量计费方式**，灵活适配不同计费模型
-- 提供灵活的转发策略配置，适用于多种网络场景
-- 面板分享，支持将节点分享给其他人，面板对接面板
-- 支持分组权限管理，隧道分组、用户分组
-- 支持批量功能，可以批量下发配置，启停等
-- 支持隧道修改配置、转发修改隧道
+- 控制面继续使用 FLVX 面板模型（用户/节点/隧道/转发）
+- 数据面支持按转发选择引擎（当前可选 `gost` / `nftables` / `realm`）
+- 提供一键部署、增量同步、联调测试与迁移能力
 
+## 近期核心改动
 
-## 部署流程
----
-### Docker Compose部署
-#### 快速部署（安装最新版）
+### 1) 转发引擎字段全链路打通
+- `forward.engine` 已贯通后端模型、API、列表展示、导入导出与迁移。
+- 后端下发节点运行命令时会显式携带 `forwarder.engine`。
+- 前端转发配置页支持选择引擎并持久化。
+
+### 2) PO0 增量同步能力（nft-only）
+- 新增脚本：`scripts/sync-po0-forwards-to-panel.sh`
+- 从 PO0 的 `/etc/relay-forwards.conf` 读取现有转发，自动同步到面板。
+- 同步时强制写入 `engine=nftables`，不会写入 `gost`。
+
+### 3) 引擎联调脚本
+- 新增脚本：`scripts/e2e-engine-check.sh`
+- 可在远程开发机一键验证：
+  - 面板创建转发时 `engine` 持久化
+  - 运行时 `UpdateService` 下发体含 `forwarder.engine`
+
+### 4) 回归测试补强
+- 新增/补强 `engine` 相关单元与契约测试。
+- 新增脚本级测试：`tests/scripts/test_sync_po0_forwards.sh`
+
+## 功能特性
+
+- 支持 TCP / UDP 转发
+- 支持端口转发与隧道转发
+- 支持节点分享（面板对接面板）
+- 支持分组权限管理（隧道分组、用户分组）
+- 支持批量下发、批量启停等运维操作
+- 支持按隧道账号控制转发与流量策略
+- 支持转发级引擎选择（`gost` / `nftables` / `realm`）
+- 支持从 PO0 增量同步转发到面板（可锁定 `nftables`）
+
+## 目录说明
+
+- `go-backend/`：控制面后端服务
+- `vite-frontend/`：前端管理面板
+- `go-gost/`：节点代理与执行侧实现
+- `scripts/`：联调与运维脚本（含 PO0 同步）
+- `docs/`：部署、架构与测试文档
+
+## 部署方式
+
+详细部署文档见：`docs/deploy/fork-nft-deploy.md`
+
+### 方式 A：一键脚本部署（发布版）
+
 面板端：
+
 ```bash
 curl -L https://raw.githubusercontent.com/Sagit-chu/flux-panel/main/panel_install.sh -o panel_install.sh && chmod +x panel_install.sh && ./panel_install.sh
 ```
+
 节点端：
+
 ```bash
 curl -L https://raw.githubusercontent.com/Sagit-chu/flux-panel/main/install.sh -o install.sh && chmod +x install.sh && ./install.sh
 ```
 
-#### 安装特定版本
-从 [Releases](https://github.com/Sagit-chu/flux-panel/releases) 页面复制对应版本的安装命令，脚本会自动安装该版本而非最新版。
+### 方式 B：源码构建部署（推荐用于 Fork 功能验证）
 
-面板端（以 2.1.0 为例）：
-```bash
-curl -L https://github.com/Sagit-chu/flux-panel/releases/download/2.1.0/panel_install.sh -o panel_install.sh && chmod +x panel_install.sh && ./panel_install.sh
-```
-节点端（以 2.1.0 为例）：
-```bash
-curl -L https://github.com/Sagit-chu/flux-panel/releases/download/2.1.0/install.sh -o install.sh && chmod +x install.sh && ./install.sh
-```
-
-#### PostgreSQL 部署（Docker Compose）
-
-安装脚本会根据环境自动下载对应的 Compose 配置并保存为 `docker-compose.yml`。默认仍使用 SQLite，切换到 PostgreSQL 只需要配置环境变量。
-
-1) 在 `docker-compose` 同目录创建或修改 `.env`：
+在服务器上：
 
 ```bash
-JWT_SECRET=replace_with_your_secret
-BACKEND_PORT=6365
-FRONTEND_PORT=6366
+git clone https://github.com/JackLuo1980/Fork-Nft.git
+cd Fork-Nft
 
-DB_TYPE=postgres
-DATABASE_URL=postgres://flux_panel:replace_with_strong_password@postgres:5432/flux_panel?sslmode=disable
+# 构建 Fork 后端/前端镜像
+(cd go-backend && docker build -t fork-nft-backend:latest .)
+(cd vite-frontend && docker build -t fork-nft-frontend:latest .)
 
-POSTGRES_DB=flux_panel
-POSTGRES_USER=flux_panel
-POSTGRES_PASSWORD=replace_with_strong_password
+# 覆盖 compose 镜像
+cat > docker-compose.override.yml <<'YAML'
+services:
+  backend:
+    image: fork-nft-backend:latest
+  frontend:
+    image: fork-nft-frontend:latest
+YAML
+
+# 启动
+cp -n .env.example .env 2>/dev/null || true
+docker compose -f docker-compose-v4.yml -f docker-compose.override.yml up -d
 ```
 
-> 📌 使用安装脚本部署时，`POSTGRES_PASSWORD` 会自动随机生成并写入 `.env`。
+## 默认端口与登录
 
-2) 启动服务：
+- 前端面板：`http://<server_ip>:6366/`
+- 后端 API：`http://<server_ip>:6365`
+- 默认管理员：
+  - 用户名：`admin_user`
+  - 密码：`admin_user`
+
+> 首次登录后请立即修改默认密码。
+
+## PO0 转发同步到面板（nft-only）
 
 ```bash
-docker compose up -d
+bash scripts/sync-po0-forwards-to-panel.sh \
+  --po0-host <po0_ip> \
+  --po0-password '<po0_root_password>' \
+  --panel-base 'http://<panel_ip>:6365'
 ```
 
-3) 如果你想继续使用 SQLite，保留 `DB_TYPE=sqlite`（或不设置 `DB_TYPE`）即可。
-
-#### 从 SQLite 迁移到 PostgreSQL
-
-如果你是通过 `panel_install.sh` 安装面板，推荐直接使用脚本菜单一键迁移：
+可先预演：
 
 ```bash
-./panel_install.sh
-# 选择 4. 迁移到 PostgreSQL
+bash scripts/sync-po0-forwards-to-panel.sh \
+  --po0-host <po0_ip> \
+  --po0-password '<po0_root_password>' \
+  --panel-base 'http://<panel_ip>:6365' \
+  --dry-run
 ```
 
-脚本会自动完成 SQLite 备份、PostgreSQL 启动、`pgloader` 导入、`.env` 中 `DB_TYPE`/`DATABASE_URL` 更新，并重启服务。
+同步脚本默认行为：
 
-如果你希望手动迁移，以下示例基于 Docker Volume `sqlite_data`（项目默认配置）与 `pgloader`：
+- 自动读取 PO0 状态文件 `/etc/relay-forwards.conf`
+- 自动创建/复用节点 `PO0-<ip>` 与隧道 `PO0-NFT-SYNC`
+- 按名称增量创建或更新转发
+- 强制校验目标转发 `engine=nftables`
 
-1) 停止服务并备份 SQLite 数据：
+## 测试与验收
+
+### 本地脚本测试
 
 ```bash
-docker compose down
-docker run --rm -v sqlite_data:/data -v "$(pwd)":/backup alpine sh -c "cp /data/gost.db /backup/gost.db.bak"
+./tests/scripts/test_sync_po0_forwards.sh
 ```
 
-2) 仅启动 PostgreSQL：
+### 远程引擎 E2E
 
 ```bash
-docker compose up -d postgres
+scripts/e2e-engine-check.sh --host <server_ip> --password '<root_password>'
 ```
 
-3) 使用 `pgloader` 迁移：
+常用参数：
 
-```bash
-source .env
-docker run --rm --network gost-network -v sqlite_data:/sqlite dimitri/pgloader:latest pgloader /sqlite/gost.db "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}"
-```
+- `--keep-fork-backend`：联调后保留 Fork 后端镜像
+- `--skip-build`：跳过远程重建镜像
 
-4) 切换后端到 PostgreSQL 并启动：
+## 已知注意事项
 
-```bash
-source .env
-export DB_TYPE=postgres
-export DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable"
-docker compose up -d
-```
+- 如果后端不是 Fork 版本，`engine` 字段可能无法按预期持久化；建议使用“源码构建部署”或确认后端镜像版本。
+- `panel_install.sh/install.sh` 仍基于 FLVX 发布仓库；Fork 特性验证建议使用源码镜像方式。
 
-5) 迁移完成后，登录面板检查用户、隧道、转发、节点数据是否正确。
-
-#### 默认管理员账号
-
-- **账号**: admin_user
-- **密码**: admin_user
-
-> ⚠️ 首次登录后请立即修改默认密码！
-
----
 ## Original Project
-- **Name**: flux-panel
-- **Source**: https://github.com/bqlpfy/flux-panel
-- **License**: Apache License 2.0
 
-## Modifications
-This fork (FLVX) is no longer a light patch on top of the upstream project. It has been deeply reworked, with both backend and frontend rebuilt around a Go-based architecture.
-
-### 1. Backend (Rewritten)
-- **Removed**: The original `springboot-backend/` (Java/Spring Boot) implementation.
-- **Added**: A fully rewritten `go-backend/` service (Go), including updated data and API handling for panel management.
-
-### 2. Frontend (Reworked)
-- **Reworked**: `vite-frontend/` has been substantially rebuilt to match the new backend contract and current UI layer architecture.
-- **Updated**: Dashboard pages/components and interaction flows for the current React/Vite stack.
-
-### 3. Forwarding Stack (Modified)
-- **Modified**: `go-gost/` forwarding agent wrapper.
-- **Modified**: `go-gost/x/` local fork of `github.com/go-gost/x`.
-
-### 4. Mobile Clients (Removed)
-- **Removed**: `android-app/` source code.
-- **Removed**: `ios-app/` source code.
-
-### 5. Deployment & Project Infrastructure
-- **Updated**: Docker deployment templates and installer output flow (IPv4/IPv6 compose variants).
-- **Updated**: Release installation scripts (`install.sh`, `panel_install.sh`) and supporting automation.
-- **Added/Updated**: Project-level engineering documentation (for example `AGENTS.md`).
-
----
-
+- Name: `flux-panel`
+- Source: https://github.com/bqlpfy/flux-panel
+- License: Apache License 2.0
 
 ## 免责声明
 
-本项目仅供个人学习与研究使用，基于开源项目进行二次开发。  
-
-使用本项目所带来的任何风险均由使用者自行承担，包括但不限于：  
-
-- 配置不当或使用错误导致的服务异常或不可用；  
-- 使用本项目引发的网络攻击、封禁、滥用等行为；  
-- 服务器因使用本项目被入侵、渗透、滥用导致的数据泄露、资源消耗或损失；  
-- 因违反当地法律法规所产生的任何法律责任。  
-
-本项目为开源的流量转发工具，仅限合法、合规用途。  
-使用者必须确保其使用行为符合所在国家或地区的法律法规。  
-
-**作者不对因使用本项目导致的任何法律责任、经济损失或其他后果承担责任。**  
-**禁止将本项目用于任何违法或未经授权的行为，包括但不限于网络攻击、数据窃取、非法访问等。**  
-
-如不同意上述条款，请立即停止使用本项目。  
-
-作者对因使用本项目所造成的任何直接或间接损失概不负责，亦不提供任何形式的担保、承诺或技术支持。  
-
-
-请务必在合法、合规、安全的前提下使用本项目。
-
----
-## ⭐ 喝杯咖啡！（USDT）
-
-| 网络       | 地址                                                                 |
-|------------|----------------------------------------------------------------------|
-| BNB(BEP20) | `0xa608708fdc6279a2433fd4b82f0b72b8cbe97ed5`                          |
-| TRC20      | `TM8VYdU3s3gSX5PC8swjAJrAzZFCHKqG2k`                                  |
-| Aptos      | `0x49427bfcba1006a346447430689b2307ac156316bb34850d1d3029ff9d118da5`  |
-| polygon    |  `0xa608708fdc6279a2433fd4b82f0b72b8cbe97ed5`    |
+本项目仅供个人学习与研究使用。请仅在合法、合规、安全的前提下使用，任何滥用或违法行为后果由使用者自行承担。

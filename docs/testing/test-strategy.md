@@ -50,3 +50,32 @@ scripts/e2e-engine-check.sh --host <server_ip> --password '<root_password>'
 Notes:
 - Default behavior restores backend image to base compose config after check.
 - Use `--keep-fork-backend` to keep backend on fork test image.
+
+## PO0 Sync Script Tests
+Use these checks for PO0 incremental sync workflow:
+
+1. Local script unit test
+```bash
+./tests/scripts/test_sync_po0_forwards.sh
+```
+
+2. Dry-run against real PO0 state file
+```bash
+bash scripts/sync-po0-forwards-to-panel.sh \
+  --po0-host <po0_ip> \
+  --po0-password '<po0_root_password>' \
+  --panel-base 'http://<panel_ip>:6365' \
+  --dry-run
+```
+
+3. Live sync and nftables lock verification
+```bash
+bash scripts/sync-po0-forwards-to-panel.sh \
+  --po0-host <po0_ip> \
+  --po0-password '<po0_root_password>' \
+  --panel-base 'http://<panel_ip>:6365'
+```
+
+Acceptance:
+- synced forwards match `/etc/relay-forwards.conf`
+- every synced forward reports `engine=nftables`
