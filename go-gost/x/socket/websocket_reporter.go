@@ -1112,6 +1112,10 @@ func (w *WebSocketReporter) handleApplyPortForwards(data interface{}) (*ForwardA
 	}
 
 	engineName := resolveForwardEngineName(req.Engine)
+	if engineName == "gost" {
+		// For the new external forward command, default to auto-selection.
+		engineName = "auto"
+	}
 	manager := defaultForwardEngineManager()
 	applyReq := ForwardApplyRequest{
 		AllowShrink: req.AllowShrink,

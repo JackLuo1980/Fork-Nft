@@ -59,6 +59,9 @@ func (m *ForwardEngineManager) Get(name string) (ForwardEngine, bool) {
 }
 
 func (m *ForwardEngineManager) DryRun(ctx context.Context, engineName string, req ForwardApplyRequest) (*ForwardApplyResult, error) {
+	if strings.EqualFold(engineName, "auto") {
+		engineName = selectAutoEngineName(req.Forwards)
+	}
 	engine, ok := m.Get(engineName)
 	if !ok {
 		return nil, fmt.Errorf("forward engine not found: %s", engineName)
@@ -67,6 +70,9 @@ func (m *ForwardEngineManager) DryRun(ctx context.Context, engineName string, re
 }
 
 func (m *ForwardEngineManager) Apply(ctx context.Context, engineName string, req ForwardApplyRequest) (*ForwardApplyResult, error) {
+	if strings.EqualFold(engineName, "auto") {
+		engineName = selectAutoEngineName(req.Forwards)
+	}
 	engine, ok := m.Get(engineName)
 	if !ok {
 		return nil, fmt.Errorf("forward engine not found: %s", engineName)
@@ -83,7 +89,7 @@ func defaultForwardEngineManager() *ForwardEngineManager {
 	defaultForwardEngineManagerOnce.Do(func() {
 		m := NewForwardEngineManager()
 		m.Register(NewNftablesAdapter(NftablesAdapterOptions{}))
-		m.Register(&realmForwardAdapter{})
+		m.Register(NewRealmAdapter(RealmAdapterOptions{}))
 		defaultForwardEngineManagerInst = m
 	})
 	return defaultForwardEngineManagerInst
@@ -101,14 +107,11 @@ func resolveForwardEngineName(requestEngine string) string {
 	return "gost"
 }
 
-type realmForwardAdapter struct{}
-
-func (r *realmForwardAdapter) Name() string { return "realm" }
-
-func (r *realmForwardAdapter) DryRun(_ context.Context, _ ForwardApplyRequest) (*ForwardApplyResult, error) {
-	return nil, fmt.Errorf("realm engine is not implemented yet")
-}
-
-func (r *realmForwardAdapter) Apply(_ context.Context, _ ForwardApplyRequest) (*ForwardApplyResult, error) {
-	return nil, fmt.Errorf("realm engine is not implemented yet")
+func selectAutoEngineName(forwards []ForwardPortRule) string {
+	for _, f := range forwards {
+		if strings.EqualFold(strings.TrimSpace(f.Protocol), "udp") {
+			return "nftables"
+		}
+	}
+	return "realm"
 }

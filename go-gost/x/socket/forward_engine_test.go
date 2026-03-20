@@ -106,3 +106,53 @@ func TestNftablesAdapterRollbackOnRunnerFailure(t *testing.T) {
 		t.Fatalf("nft not rolled back, got %q", string(gotNFT))
 	}
 }
+
+func TestSelectAutoEngineName(t *testing.T) {
+	engine := selectAutoEngineName([]ForwardPortRule{
+		{Name: "tcp1", Target: "a.example.com", TargetPort: 443, RelayPort: 30001, Protocol: "tcp"},
+	})
+	if engine != "realm" {
+		t.Fatalf("expected realm for tcp-only forwards, got %q", engine)
+	}
+
+	engine = selectAutoEngineName([]ForwardPortRule{
+		{Name: "udp1", Target: "a.example.com", TargetPort: 53, RelayPort: 30002, Protocol: "udp"},
+	})
+	if engine != "nftables" {
+		t.Fatalf("expected nftables when udp exists, got %q", engine)
+	}
+}
+
+func TestRealmAdapterApplyWritesConfig(t *testing.T) {
+	dir := t.TempDir()
+	realmPath := filepath.Join(dir, "realm.toml")
+	adapter := NewRealmAdapter(RealmAdapterOptions{
+		ConfigPath: realmPath,
+		RunCheckAndApply: func(_ string) error {
+			return nil
+		},
+	})
+
+	result, err := adapter.Apply(context.Background(), ForwardApplyRequest{
+		Forwards: []ForwardPortRule{
+			{Name: "r1", Target: "203.0.113.9", TargetPort: 443, RelayPort: 31001, Protocol: "tcp"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("realm apply failed: %v", err)
+	}
+	if result.Engine != "realm" || result.RulesApplied != 1 {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+	content, err := os.ReadFile(realmPath)
+	if err != nil {
+		t.Fatalf("read realm config failed: %v", err)
+	}
+	got := string(content)
+	if !strings.Contains(got, "listen = \"0.0.0.0:31001\"") {
+		t.Fatalf("realm config missing listen: %s", got)
+	}
+	if !strings.Contains(got, "remote = \"203.0.113.9:443\"") {
+		t.Fatalf("realm config missing remote: %s", got)
+	}
+}
