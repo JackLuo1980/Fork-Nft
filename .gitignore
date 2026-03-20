@@ -154,6 +154,10 @@ jspm_packages/
 # Optional eslint cache
 .eslintcache
 
+# Python cache
+__pycache__/
+*.pyc
+
 # Yarn Integrity file
 .yarn-integrity
 
