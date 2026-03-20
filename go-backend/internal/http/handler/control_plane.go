@@ -1553,6 +1553,10 @@ func buildForwardServiceConfigs(baseName string, forward *forwardRecord, tunnel 
 	if strategy == "" {
 		strategy = "fifo"
 	}
+	engine := strings.TrimSpace(forward.Engine)
+	if engine == "" {
+		engine = "gost"
+	}
 
 	for _, protocol := range protocols {
 		listenerAddr := node.TCPListenAddr
@@ -1585,6 +1589,7 @@ func buildForwardServiceConfigs(baseName string, forward *forwardRecord, tunnel 
 					"maxFails":    1,
 					"failTimeout": "600s",
 				},
+				"engine": engine,
 			},
 		}
 		if protocol == "udp" {

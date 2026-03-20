@@ -421,6 +421,54 @@ func TestBuildForwardServiceConfigs_BindIPAlreadyContainsPort(t *testing.T) {
 	}
 }
 
+func TestBuildForwardServiceConfigs_IncludesForwardEngine(t *testing.T) {
+	forward := &forwardRecord{
+		RemoteAddr: "1.2.3.4:80",
+		Strategy:   "fifo",
+		Engine:     "realm",
+		TunnelID:   7,
+	}
+	node := &nodeRecord{TCPListenAddr: "0.0.0.0", UDPListenAddr: "0.0.0.0"}
+	services := buildForwardServiceConfigs("1_2_0", forward, nil, node, 22002, "", nil, false)
+	if len(services) != 2 {
+		t.Fatalf("expected 2 services, got %d", len(services))
+	}
+	for _, svc := range services {
+		forwarder, ok := svc["forwarder"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("expected forwarder map in service: %+v", svc)
+		}
+		engine, _ := forwarder["engine"].(string)
+		if engine != "realm" {
+			t.Fatalf("expected forwarder.engine realm, got %q", engine)
+		}
+	}
+}
+
+func TestBuildForwardServiceConfigs_DefaultEngineGost(t *testing.T) {
+	forward := &forwardRecord{
+		RemoteAddr: "1.2.3.4:80",
+		Strategy:   "fifo",
+		Engine:     " ",
+		TunnelID:   7,
+	}
+	node := &nodeRecord{TCPListenAddr: "0.0.0.0", UDPListenAddr: "0.0.0.0"}
+	services := buildForwardServiceConfigs("1_2_0", forward, nil, node, 22003, "", nil, false)
+	if len(services) == 0 {
+		t.Fatalf("expected services to be generated")
+	}
+	for _, svc := range services {
+		forwarder, ok := svc["forwarder"].(map[string]interface{})
+		if !ok {
+			t.Fatalf("expected forwarder map in service: %+v", svc)
+		}
+		engine, _ := forwarder["engine"].(string)
+		if engine != "gost" {
+			t.Fatalf("expected default forwarder.engine gost, got %q", engine)
+		}
+	}
+}
+
 func TestProcessServerAddress_StripsURLSchemeAndPath(t *testing.T) {
 	tests := []struct {
 		name string
