@@ -87,6 +87,25 @@ bash scripts/sync-po0-forwards-to-panel.sh \
 - 创建/复用节点 `PO0-<ip>`
 - 创建/复用隧道 `PO0-NFT-SYNC`
 - 同步转发并强制 `engine=nftables`
+- 状态文件按 `name|host|target_port|relay_port` 解析（`inPort=relay_port`）
+
+## 5.4 nft-only 流量统计（推荐开启）
+
+在节点执行：
+
+```bash
+bash scripts/install-nft-flow-exporter.sh \
+  --panel-base 'http://<panel_ip>:6365' \
+  --panel-user '<panel_user>' \
+  --panel-password '<panel_password>'
+```
+
+检查：
+
+```bash
+systemctl status nft-flow-exporter.timer --no-pager -l
+journalctl -u nft-flow-exporter.service -n 50 --no-pager
+```
 
 ## 6. 验收清单
 

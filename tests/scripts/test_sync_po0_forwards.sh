@@ -46,6 +46,7 @@ test_parse_lines() {
   assert_eq "$count" "2" "parse_relay_lines should keep only valid records"
   assert_contains "$out" '"name":"A"' "first record name"
   assert_contains "$out" '"target_host":"hktnat.jung.eu.org"' "domain target should be preserved"
+  assert_contains "$out" '"name":"A","target_host":"1.2.3.4","in_port":12071,"target_port":23202' "state file uses target_port before relay_port; parser must map in_port to relay_port"
 }
 
 test_engine_lock() {

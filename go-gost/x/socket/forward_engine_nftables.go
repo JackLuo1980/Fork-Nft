@@ -185,12 +185,12 @@ func (n *nftablesAdapter) renderNftConfig(forwards []ForwardPortRule) (string, e
 	b.WriteString("table ip nat {\n")
 	b.WriteString("    chain prerouting { type nat hook prerouting priority dstnat; policy accept;\n")
 	for i := range forwards {
-		b.WriteString(fmt.Sprintf("        meta l4proto { tcp, udp } th dport $PORT_IN_%d dnat to $DEST_IP_%d:$DEST_PORT_%d\n", i+1, i+1, i+1))
+		b.WriteString(fmt.Sprintf("        meta l4proto { tcp, udp } th dport $PORT_IN_%d counter dnat to $DEST_IP_%d:$DEST_PORT_%d\n", i+1, i+1, i+1))
 	}
 	b.WriteString("    }\n")
 	b.WriteString("    chain postrouting { type nat hook postrouting priority srcnat; policy accept;\n")
 	for i := range forwards {
-		b.WriteString(fmt.Sprintf("        ip daddr $DEST_IP_%d meta l4proto { tcp, udp } th dport $DEST_PORT_%d snat to $RELAY_LAN_IP\n", i+1, i+1))
+		b.WriteString(fmt.Sprintf("        ip daddr $DEST_IP_%d meta l4proto { tcp, udp } th dport $DEST_PORT_%d counter snat to $RELAY_LAN_IP\n", i+1, i+1))
 	}
 	b.WriteString("    }\n")
 	b.WriteString("}\n")

@@ -32,6 +32,11 @@
 - 新增/补强 `engine` 相关单元与契约测试。
 - 新增脚本级测试：`tests/scripts/test_sync_po0_forwards.sh`
 
+### 5) nft 模式流量统计补齐
+- 新增 `scripts/nft-flow-exporter.py`（读取 nft counter 增量并上报面板 `/flow/upload`）。
+- 新增 `scripts/install-nft-flow-exporter.sh`（一键安装 systemd 定时任务）。
+- `go-gost` nftables 规则模板已加入 `counter`，支持后续流量采样。
+
 ## 功能特性
 
 - 支持 TCP / UDP 转发
@@ -143,6 +148,24 @@ bash scripts/sync-po0-forwards-to-panel.sh \
 
 ```bash
 scripts/e2e-engine-check.sh --host <server_ip> --password '<root_password>'
+```
+
+### nft 流量导出器（nft-only 推荐）
+
+在节点机执行：
+
+```bash
+bash scripts/install-nft-flow-exporter.sh \
+  --panel-base 'http://<panel_ip>:6365' \
+  --panel-user '<panel_user>' \
+  --panel-password '<panel_password>'
+```
+
+检查状态：
+
+```bash
+systemctl status nft-flow-exporter.timer --no-pager -l
+journalctl -u nft-flow-exporter.service -n 50 --no-pager
 ```
 
 常用参数：

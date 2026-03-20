@@ -364,11 +364,28 @@ func (r *Repository) UpdateUserNameAndPassword(userID int64, username, passwordM
 	if r == nil || r.db == nil {
 		return errors.New("repository not initialized")
 	}
-	return r.db.Model(&model.User{}).Where("id = ?", userID).Updates(map[string]interface{}{
-		"user":         username,
-		"pwd":          passwordMD5,
-		"updated_time": now,
-	}).Error
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&model.User{}).Where("id = ?", userID).Updates(map[string]interface{}{
+			"user":         username,
+			"pwd":          passwordMD5,
+			"updated_time": now,
+		}).Error; err != nil {
+			return err
+		}
+		return syncForwardUserNameByUserIDTx(tx, userID, username, now)
+	})
+}
+
+func syncForwardUserNameByUserIDTx(tx *gorm.DB, userID int64, username string, now int64) error {
+	if tx == nil {
+		return errors.New("transaction not initialized")
+	}
+	return tx.Model(&model.Forward{}).
+		Where("user_id = ?", userID).
+		Updates(map[string]interface{}{
+			"user_name":    username,
+			"updated_time": sql.NullInt64{Int64: now, Valid: true},
+		}).Error
 }
 
 // ─── Config Queries ──────────────────────────────────────────────────

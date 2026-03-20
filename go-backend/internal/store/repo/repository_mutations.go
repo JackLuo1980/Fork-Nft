@@ -75,35 +75,45 @@ func (r *Repository) UpdateUserWithPassword(id int64, username, pwdHash string, 
 	if r == nil || r.db == nil {
 		return errors.New("repository not initialized")
 	}
-	return r.db.Model(&model.User{}).
-		Where("id = ?", id).
-		Updates(map[string]interface{}{
-			"user":            username,
-			"pwd":             pwdHash,
-			"flow":            flow,
-			"num":             num,
-			"exp_time":        expTime,
-			"flow_reset_time": flowResetTime,
-			"status":          status,
-			"updated_time":    sql.NullInt64{Int64: now, Valid: true},
-		}).Error
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&model.User{}).
+			Where("id = ?", id).
+			Updates(map[string]interface{}{
+				"user":            username,
+				"pwd":             pwdHash,
+				"flow":            flow,
+				"num":             num,
+				"exp_time":        expTime,
+				"flow_reset_time": flowResetTime,
+				"status":          status,
+				"updated_time":    sql.NullInt64{Int64: now, Valid: true},
+			}).Error; err != nil {
+			return err
+		}
+		return syncForwardUserNameByUserIDTx(tx, id, username, now)
+	})
 }
 
 func (r *Repository) UpdateUserWithoutPassword(id int64, username string, flow int64, num int, expTime, flowResetTime int64, status int, now int64) error {
 	if r == nil || r.db == nil {
 		return errors.New("repository not initialized")
 	}
-	return r.db.Model(&model.User{}).
-		Where("id = ?", id).
-		Updates(map[string]interface{}{
-			"user":            username,
-			"flow":            flow,
-			"num":             num,
-			"exp_time":        expTime,
-			"flow_reset_time": flowResetTime,
-			"status":          status,
-			"updated_time":    sql.NullInt64{Int64: now, Valid: true},
-		}).Error
+	return r.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&model.User{}).
+			Where("id = ?", id).
+			Updates(map[string]interface{}{
+				"user":            username,
+				"flow":            flow,
+				"num":             num,
+				"exp_time":        expTime,
+				"flow_reset_time": flowResetTime,
+				"status":          status,
+				"updated_time":    sql.NullInt64{Int64: now, Valid: true},
+			}).Error; err != nil {
+			return err
+		}
+		return syncForwardUserNameByUserIDTx(tx, id, username, now)
+	})
 }
 
 func (r *Repository) PropagateUserFlowToTunnels(userID int64, flow int64, num int, expTime, flowResetTime int64) {

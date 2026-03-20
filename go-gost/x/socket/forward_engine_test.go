@@ -107,6 +107,27 @@ func TestNftablesAdapterRollbackOnRunnerFailure(t *testing.T) {
 	}
 }
 
+func TestNftablesAdapterRenderIncludesCounters(t *testing.T) {
+	adapter := NewNftablesAdapter(NftablesAdapterOptions{
+		ResolveIPv4: func(target string) (string, error) {
+			return "203.0.113.9", nil
+		},
+	})
+
+	cfg, err := adapter.(*nftablesAdapter).renderNftConfig([]ForwardPortRule{
+		{Name: "f1", Target: "a.example.com", TargetPort: 443, RelayPort: 31000},
+	})
+	if err != nil {
+		t.Fatalf("render nft config: %v", err)
+	}
+	if !strings.Contains(cfg, "th dport $PORT_IN_1 counter dnat") {
+		t.Fatalf("expected prerouting dnat counter rule, got:\n%s", cfg)
+	}
+	if !strings.Contains(cfg, "th dport $DEST_PORT_1 counter snat") {
+		t.Fatalf("expected postrouting snat counter rule, got:\n%s", cfg)
+	}
+}
+
 func TestSelectAutoEngineName(t *testing.T) {
 	engine := selectAutoEngineName([]ForwardPortRule{
 		{Name: "tcp1", Target: "a.example.com", TargetPort: 443, RelayPort: 30001, Protocol: "tcp"},

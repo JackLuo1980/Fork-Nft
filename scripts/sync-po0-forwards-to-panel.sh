@@ -38,15 +38,17 @@ for raw in content.splitlines():
     parts = [p.strip() for p in line.split('|')]
     if len(parts) != 4:
         continue
-    name, host, in_port, target_port = parts
+    # relay-forwards.conf format is:
+    # name|target_host_or_domain|target_port|relay_port
+    name, host, target_port, relay_port = parts
     if not name or not host:
         continue
-    if not in_port.isdigit() or not target_port.isdigit():
+    if not relay_port.isdigit() or not target_port.isdigit():
         continue
     print(json.dumps({
         'name': name,
         'target_host': host,
-        'in_port': int(in_port),
+        'in_port': int(relay_port),
         'target_port': int(target_port),
     }, ensure_ascii=False, separators=(',', ':')))
 PY
