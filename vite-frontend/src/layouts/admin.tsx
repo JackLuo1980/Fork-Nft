@@ -23,6 +23,7 @@ import { BrandLogo } from "@/components/brand-logo";
 import { VersionFooter } from "@/components/version-footer";
 import { getMonitorAccess, updatePassword } from "@/api";
 import { safeLogout } from "@/utils/logout";
+import { resolveLogoutRedirect } from "@/utils/logout-redirect";
 import { siteConfig } from "@/config/site";
 import { useMobileBreakpoint } from "@/hooks/useMobileBreakpoint";
 import { getAdminFlag, getSessionName } from "@/utils/session";
@@ -247,7 +248,9 @@ export default function AdminLayout({
   // 退出登录
   const handleLogout = () => {
     safeLogout();
-    navigate("/");
+    navigate(resolveLogoutRedirect(window.location.pathname) || "/login", {
+      replace: true,
+    });
   };
 
   // 切换移动端菜单

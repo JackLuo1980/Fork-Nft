@@ -18,6 +18,7 @@ import { siteConfig } from "@/config/site";
 import { VersionFooter } from "@/components/version-footer";
 import { updatePassword } from "@/api";
 import { safeLogout } from "@/utils/logout";
+import { resolveLogoutRedirect } from "@/utils/logout-redirect";
 import { getAdminFlag, getSessionName } from "@/utils/session";
 interface PasswordForm {
   newUsername: string;
@@ -127,7 +128,9 @@ export default function ProfilePage() {
   // 退出登录
   const handleLogout = () => {
     safeLogout();
-    navigate("/", { replace: true });
+    navigate(resolveLogoutRedirect(window.location.pathname) || "/login", {
+      replace: true,
+    });
   };
 
   // 密码表单验证

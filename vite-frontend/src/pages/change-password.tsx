@@ -9,6 +9,7 @@ import { title } from "@/components/primitives";
 import { updatePassword } from "@/api";
 import DefaultLayout from "@/layouts/default";
 import { safeLogout } from "@/utils/logout";
+import { resolveLogoutRedirect } from "@/utils/logout-redirect";
 
 interface PasswordForm {
   newUsername: string;
@@ -98,7 +99,9 @@ export default function ChangePasswordPage() {
 
   const logout = () => {
     safeLogout();
-    navigate("/");
+    navigate(resolveLogoutRedirect(window.location.pathname) || "/login", {
+      replace: true,
+    });
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
