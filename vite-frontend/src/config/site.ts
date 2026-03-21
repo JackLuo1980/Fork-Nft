@@ -1,4 +1,5 @@
 import { getConfigByName, getConfigs } from "@/api";
+import { createDefaultSiteConfig } from "@/config/site-defaults";
 
 export type SiteConfig = typeof siteConfig;
 
@@ -8,19 +9,10 @@ const VERSION = import.meta.env.VITE_APP_VERSION || "dev";
 const APP_VERSION = "1.0.3";
 const DEFAULT_FAVICON = "/favicon.ico";
 const FAVICON_LINK_ID = "app-favicon";
-const GITHUB_REPO =
-  import.meta.env.VITE_GITHUB_REPO || "https://github.com/Sagit-chu/flux-panel";
 
 const getInitialConfig = () => {
   if (typeof window === "undefined") {
-    return {
-      name: "FLVX",
-      version: VERSION,
-      app_version: APP_VERSION,
-      github_repo: GITHUB_REPO,
-      app_logo: "",
-      app_favicon: "",
-    };
+    return createDefaultSiteConfig();
   }
 
   const cachedAppName = localStorage.getItem(CACHE_PREFIX + "app_name");
@@ -33,17 +25,18 @@ const getInitialConfig = () => {
       name: cachedAppName,
       version: VERSION,
       app_version: APP_VERSION,
-      github_repo: GITHUB_REPO,
+      github_repo: createDefaultSiteConfig().github_repo,
       app_logo: cachedAppLogo,
       app_favicon: cachedAppFavicon,
     };
   }
 
+  const defaults = createDefaultSiteConfig();
+
   return {
-    name: "FLVX",
+    ...defaults,
     version: VERSION,
     app_version: APP_VERSION,
-    github_repo: GITHUB_REPO,
     app_logo: cachedAppLogo,
     app_favicon: cachedAppFavicon,
   };
