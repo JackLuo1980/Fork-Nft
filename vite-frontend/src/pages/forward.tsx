@@ -5356,7 +5356,7 @@ export default function ForwardPage() {
                 maxRows={12}
                 minRows={8}
                 placeholder={
-                  importFormat === "flvx"
+                  importFormat === "realm"
                     ? "请输入要导入的规则数据，格式：目标地址|规则名称|入口端口"
                     : '请输入ny格式数据，每行一个JSON对象，如：{"dest":["1.2.3.4:80"],"listen_port":8080,"name":"规则1"}；listen_port可省略自动分配'
                 }
