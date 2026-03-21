@@ -102,7 +102,7 @@ export function VersionFooter({
           rel="noopener noreferrer"
           target="_blank"
         >
-          FLVX
+          REALM
         </a>
       </p>
     </div>

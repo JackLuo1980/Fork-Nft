@@ -14,7 +14,7 @@ const GITHUB_REPO =
 const getInitialConfig = () => {
   if (typeof window === "undefined") {
     return {
-      name: "FLVX",
+      name: "REALM",
       version: VERSION,
       app_version: APP_VERSION,
       github_repo: GITHUB_REPO,
@@ -40,7 +40,7 @@ const getInitialConfig = () => {
   }
 
   return {
-    name: "FLVX",
+    name: "REALM",
     version: VERSION,
     app_version: APP_VERSION,
     github_repo: GITHUB_REPO,
