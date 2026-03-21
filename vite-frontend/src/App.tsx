@@ -1,4 +1,4 @@
-import { Route, Routes, useNavigate } from "react-router-dom";
+import { Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { useEffect } from "react";
 
 import IndexPage from "@/pages/index";
@@ -21,6 +21,7 @@ import H5SimpleLayout from "@/layouts/h5-simple";
 import { isLoggedIn } from "@/utils/auth";
 import { siteConfig, updateSiteConfig } from "@/config/site";
 import { useH5Mode } from "@/hooks/useH5Mode";
+import { resolveEntryRedirect } from "@/utils/route-guard";
 
 // 简化的路由保护组件 - 使用 React Router 导航避免循环
 const ProtectedRoute = ({
@@ -34,16 +35,17 @@ const ProtectedRoute = ({
 }) => {
   const authenticated = isLoggedIn();
   const isH5 = useH5Mode();
+  const { pathname } = useLocation();
   const navigate = useNavigate();
+  const redirectTarget = resolveEntryRedirect(authenticated, pathname);
 
   useEffect(() => {
-    if (!authenticated) {
-      // 使用 React Router 导航，避免无限跳转
-      navigate("/", { replace: true });
+    if (redirectTarget) {
+      navigate(redirectTarget, { replace: true });
     }
-  }, [authenticated, navigate]);
+  }, [navigate, redirectTarget]);
 
-  if (!authenticated) {
+  if (redirectTarget) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-white dark:bg-black">
         <div className="text-lg text-gray-700 dark:text-gray-200" />
@@ -66,16 +68,17 @@ const ProtectedRoute = ({
 // 登录页面路由组件 - 已登录则重定向到dashboard
 const LoginRoute = () => {
   const authenticated = isLoggedIn();
+  const { pathname } = useLocation();
   const navigate = useNavigate();
+  const redirectTarget = resolveEntryRedirect(authenticated, pathname);
 
   useEffect(() => {
-    if (authenticated) {
-      // 使用 React Router 导航，避免无限跳转
-      navigate("/dashboard", { replace: true });
+    if (redirectTarget) {
+      navigate(redirectTarget, { replace: true });
     }
-  }, [authenticated, navigate]);
+  }, [navigate, redirectTarget]);
 
-  if (authenticated) {
+  if (redirectTarget) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-100 dark:bg-black">
         <div className="text-lg text-gray-700 dark:text-gray-200" />
@@ -107,6 +110,7 @@ function App() {
   return (
     <Routes>
       <Route element={<LoginRoute />} path="/" />
+      <Route element={<LoginRoute />} path="/login" />
       <Route
         element={
           <ProtectedRoute skipLayout={true}>
