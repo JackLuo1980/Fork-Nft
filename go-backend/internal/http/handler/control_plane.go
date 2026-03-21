@@ -1546,8 +1546,19 @@ func compactErrorMessage(msg string) string {
 }
 
 func buildForwardServiceConfigs(baseName string, forward *forwardRecord, tunnel *tunnelRecord, node *nodeRecord, port int, bindIP string, limiterID *int64, tunnelTLSProtocol bool) []map[string]interface{} {
-	protocols := []string{"tcp", "udp"}
-	services := make([]map[string]interface{}, 0, 2)
+	var protocols []string
+	switch strings.ToLower(strings.TrimSpace(forward.Protocols)) {
+	case "tcp":
+		protocols = []string{"tcp"}
+	case "udp":
+		protocols = []string{"udp"}
+	case "both":
+		protocols = []string{"tcp", "udp"}
+	default:
+		protocols = []string{"tcp"}
+	}
+
+	services := make([]map[string]interface{}, 0, len(protocols))
 	targets := splitRemoteTargets(forward.RemoteAddr)
 	strategy := strings.TrimSpace(forward.Strategy)
 	if strategy == "" {
@@ -1556,6 +1567,11 @@ func buildForwardServiceConfigs(baseName string, forward *forwardRecord, tunnel 
 	engine := strings.TrimSpace(forward.Engine)
 	if engine == "" {
 		engine = "gost"
+	}
+
+	forwardType := strings.ToLower(strings.TrimSpace(forward.ForwardType))
+	if forwardType == "" {
+		forwardType = "port_forward"
 	}
 
 	for _, protocol := range protocols {
@@ -1573,6 +1589,22 @@ func buildForwardServiceConfigs(baseName string, forward *forwardRecord, tunnel 
 		} else {
 			serviceAddr = processServerAddress(fmt.Sprintf("%s:%d", listenerAddr, port))
 		}
+
+		forwarder := map[string]interface{}{
+			"nodes": buildForwarderNodes(targets),
+			"selector": map[string]interface{}{
+				"strategy":    strategy,
+				"maxFails":    1,
+				"failTimeout": "600s",
+			},
+			"engine": engine,
+		}
+
+		if forwardType == "tunnel_forward" {
+			forwarder["type"] = "chain"
+			forwarder["chain"] = fmt.Sprintf("chains_%d", forward.TunnelID)
+		}
+
 		service := map[string]interface{}{
 			"name": fmt.Sprintf("%s_%s", baseName, protocol),
 			"addr": serviceAddr,
@@ -1582,15 +1614,7 @@ func buildForwardServiceConfigs(baseName string, forward *forwardRecord, tunnel 
 			"listener": map[string]interface{}{
 				"type": protocol,
 			},
-			"forwarder": map[string]interface{}{
-				"nodes": buildForwarderNodes(targets),
-				"selector": map[string]interface{}{
-					"strategy":    strategy,
-					"maxFails":    1,
-					"failTimeout": "600s",
-				},
-				"engine": engine,
-			},
+			"forwarder": forwarder,
 		}
 		if protocol == "udp" {
 			listenerMetadata := map[string]interface{}{"keepAlive": true}
@@ -1599,10 +1623,10 @@ func buildForwardServiceConfigs(baseName string, forward *forwardRecord, tunnel 
 			}
 			service["listener"].(map[string]interface{})["metadata"] = listenerMetadata
 		}
-		if tunnel != nil && tunnel.Type == 2 {
+		if forwardType == "port_forward" && tunnel != nil && tunnel.Type == 2 {
 			service["handler"].(map[string]interface{})["chain"] = fmt.Sprintf("chains_%d", forward.TunnelID)
 		}
-		if tunnel != nil && tunnel.Type == 1 && strings.TrimSpace(node.InterfaceName) != "" {
+		if forwardType == "port_forward" && tunnel != nil && tunnel.Type == 1 && strings.TrimSpace(node.InterfaceName) != "" {
 			service["metadata"] = map[string]interface{}{"interface": node.InterfaceName}
 		}
 		if limiterID != nil && *limiterID > 0 {

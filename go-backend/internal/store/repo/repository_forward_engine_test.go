@@ -4,8 +4,9 @@ import (
 	"testing"
 	"time"
 
-	gsqlite "github.com/glebarez/sqlite"
 	"go-backend/internal/store/model"
+
+	gsqlite "github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
@@ -21,7 +22,7 @@ func TestCreateAndUpdateForwardPersistsEngine(t *testing.T) {
 	forwardID, err := r.CreateForwardTx(
 		1, "u1", "fwd-1", 1, "203.0.113.10:443",
 		"fifo", "realm",
-		now, 1, []int64{11}, 18080, "", nil,
+		now, 1, []int64{11}, 18080, "", nil, "", "",
 	)
 	if err != nil {
 		t.Fatalf("create forward: %v", err)
@@ -41,7 +42,7 @@ func TestCreateAndUpdateForwardPersistsEngine(t *testing.T) {
 	if err := r.UpdateForward(
 		forwardID, "fwd-1-updated", 1, "203.0.113.11:443",
 		"round", "nftables",
-		now+1, nil,
+		now+1, nil, "", "",
 	); err != nil {
 		t.Fatalf("update forward: %v", err)
 	}
@@ -60,7 +61,7 @@ func TestCreateAndUpdateForwardPersistsEngine(t *testing.T) {
 	r.RollbackForwardFields(
 		forwardID, 1, "u1", "fwd-1", 1, "203.0.113.10:443",
 		"fifo", "realm",
-		1, nil, now+2,
+		1, nil, now+2, "", "",
 	)
 	rolledBack, err := r.GetForwardRecord(forwardID)
 	if err != nil {

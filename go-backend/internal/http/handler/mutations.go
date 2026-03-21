@@ -1631,7 +1631,9 @@ func (h *Handler) forwardCreate(w http.ResponseWriter, r *http.Request) {
 	}
 	strategy := defaultString(strings.TrimSpace(asString(req["strategy"])), "fifo")
 	engine := normalizeForwardEngine(asString(req["engine"]))
-	forwardID, err := h.repo.CreateForwardTx(userID, userName, name, tunnelID, remoteAddr, strategy, engine, now, inx, entryNodes, port, inIp, nullableInt(speedID))
+	forwardType := normalizeForwardType(asString(req["forwardType"]))
+	protocols := normalizeProtocols(asString(req["protocols"]))
+	forwardID, err := h.repo.CreateForwardTx(userID, userName, name, tunnelID, remoteAddr, strategy, engine, now, inx, entryNodes, port, inIp, nullableInt(speedID), forwardType, protocols)
 	if err != nil {
 		response.WriteJSON(w, response.Err(-2, err.Error()))
 		return
@@ -1729,6 +1731,20 @@ func (h *Handler) forwardUpdate(w http.ResponseWriter, r *http.Request) {
 		newSpeedID = sql.NullInt64{Valid: false}
 	}
 
+	forwardType := ""
+	if rawForwardType, ok := req["forwardType"]; ok {
+		forwardType = normalizeForwardType(asString(rawForwardType))
+	} else {
+		forwardType = forward.ForwardType
+	}
+
+	protocols := ""
+	if rawProtocols, ok := req["protocols"]; ok {
+		protocols = normalizeProtocols(asString(rawProtocols))
+	} else {
+		protocols = forward.Protocols
+	}
+
 	port := asInt(req["inPort"], 0)
 	if port <= 0 {
 		minPort := h.repo.GetMinForwardPort(id)
@@ -1780,7 +1796,7 @@ func (h *Handler) forwardUpdate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	now := time.Now().UnixMilli()
-	if err := h.repo.UpdateForward(id, name, tunnelID, remoteAddr, strategy, engine, now, newSpeedID); err != nil {
+	if err := h.repo.UpdateForward(id, name, tunnelID, remoteAddr, strategy, engine, now, newSpeedID, forwardType, protocols); err != nil {
 		response.WriteJSON(w, response.Err(-2, err.Error()))
 		return
 	}
@@ -3755,6 +3771,7 @@ func (h *Handler) rollbackForwardMutation(oldForward *forwardRecord, oldPorts []
 		oldForward.TunnelID, oldForward.RemoteAddr, oldForward.Strategy, oldForward.Engine, oldForward.Status,
 		oldForward.SpeedID,
 		time.Now().UnixMilli(),
+		oldForward.ForwardType, oldForward.Protocols,
 	)
 
 	if err := h.replaceForwardPortsWithRecords(oldForward.ID, oldPorts); err != nil {
@@ -3776,6 +3793,30 @@ func normalizeForwardEngine(raw string) string {
 		return "realm"
 	default:
 		return "auto"
+	}
+}
+
+func normalizeForwardType(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", "port_forward":
+		return "port_forward"
+	case "tunnel_forward":
+		return "tunnel_forward"
+	default:
+		return "port_forward"
+	}
+}
+
+func normalizeProtocols(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", "tcp":
+		return "tcp"
+	case "udp":
+		return "udp"
+	case "both":
+		return "both"
+	default:
+		return "tcp"
 	}
 }
 

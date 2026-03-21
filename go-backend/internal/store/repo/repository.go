@@ -782,11 +782,13 @@ func (r *Repository) ListForwards() ([]map[string]interface{}, error) {
 		Status       int
 		Inx          int
 		SpeedID      sql.NullInt64
+		ForwardType  string
+		Protocols    string
 	}
 
 	var rows []fwdRow
 	err := r.db.Model(&model.Forward{}).
-		Select("forward.id, forward.user_id, forward.user_name, forward.name, forward.tunnel_id, COALESCE(tunnel.name, '') AS tunnel_name, COALESCE(tunnel.traffic_ratio, 1.0) AS traffic_ratio, forward.remote_addr, COALESCE(forward.strategy, 'fifo') AS strategy, COALESCE(NULLIF(TRIM(forward.engine), ''), 'gost') AS engine, forward.in_flow, forward.out_flow, forward.created_time, forward.status, forward.inx, forward.speed_id").
+		Select("forward.id, forward.user_id, forward.user_name, forward.name, forward.tunnel_id, COALESCE(tunnel.name, '') AS tunnel_name, COALESCE(tunnel.traffic_ratio, 1.0) AS traffic_ratio, forward.remote_addr, COALESCE(forward.strategy, 'fifo') AS strategy, COALESCE(NULLIF(TRIM(forward.engine), ''), 'gost') AS engine, forward.in_flow, forward.out_flow, forward.created_time, forward.status, forward.inx, forward.speed_id, COALESCE(forward.forward_type, 'port_forward') AS forward_type, COALESCE(forward.protocols, 'tcp') AS protocols").
 		Joins("LEFT JOIN tunnel ON tunnel.id = forward.tunnel_id").
 		Order("forward.inx ASC, forward.id ASC").
 		Find(&rows).Error
@@ -808,6 +810,7 @@ func (r *Repository) ListForwards() ([]map[string]interface{}, error) {
 			"remoteAddr": row.RemoteAddr, "strategy": row.Strategy, "engine": row.Engine,
 			"inFlow": row.InFlow, "outFlow": row.OutFlow,
 			"createdTime": row.CreatedTime, "status": row.Status, "inx": int64(row.Inx),
+			"forwardType": row.ForwardType, "protocols": row.Protocols,
 		}
 		if row.SpeedID.Valid {
 			item["speedId"] = row.SpeedID.Int64

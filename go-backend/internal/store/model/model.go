@@ -34,6 +34,8 @@ type Forward struct {
 	UserName    string        `gorm:"column:user_name;type:varchar(100);not null"`
 	Name        string        `gorm:"type:varchar(100);not null"`
 	TunnelID    int64         `gorm:"column:tunnel_id;not null"`
+	ForwardType string        `gorm:"column:forward_type;type:varchar(20);not null;default:'port_forward'"`
+	Protocols   string        `gorm:"column:protocols;type:varchar(10);not null;default:'tcp'"`
 	RemoteAddr  string        `gorm:"column:remote_addr;type:text;not null"`
 	Strategy    string        `gorm:"type:varchar(100);not null;default:'fifo'"`
 	Engine      string        `gorm:"type:varchar(20);not null;default:'gost'"`
@@ -53,6 +55,7 @@ type ForwardPort struct {
 	ForwardID int64          `gorm:"column:forward_id;not null"`
 	NodeID    int64          `gorm:"column:node_id;not null"`
 	Port      int            `gorm:"not null"`
+	Protocol  string         `gorm:"column:protocol;type:varchar(10);not null;default:'tcp'"`
 	InIP      sql.NullString `gorm:"column:in_ip;type:text"`
 }
 
@@ -431,6 +434,8 @@ type ForwardBackup struct {
 	UserName     string               `json:"userName"`
 	Name         string               `json:"name"`
 	TunnelID     int64                `json:"tunnelId"`
+	ForwardType  string               `json:"forwardType,omitempty"`
+	Protocols    string               `json:"protocols,omitempty"`
 	RemoteAddr   string               `json:"remoteAddr"`
 	Strategy     string               `json:"strategy"`
 	Engine       string               `json:"engine,omitempty"`
@@ -445,8 +450,9 @@ type ForwardBackup struct {
 }
 
 type ForwardPortBackup struct {
-	NodeID int64 `json:"nodeId"`
-	Port   int   `json:"port"`
+	NodeID   int64  `json:"nodeId"`
+	Port     int    `json:"port"`
+	Protocol string `json:"protocol,omitempty"`
 }
 
 type UserTunnelBackup struct {
@@ -535,6 +541,8 @@ type ForwardRecord struct {
 	UserName   string
 	Name       string
 	TunnelID   int64
+	ForwardType string
+	Protocols  string
 	RemoteAddr string
 	Strategy   string
 	Engine     string

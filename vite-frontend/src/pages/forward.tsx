@@ -159,6 +159,8 @@ interface ForwardForm {
   strategy: string;
   engine: string;
   speedId: number | null;
+  forwardType: string;
+  protocols: string;
 }
 
 interface ForwardUserGroup {
@@ -819,6 +821,26 @@ const SortableTableRow = ({
           {strategyDisplay.text}
         </Chip>
       </TableCell>
+      <TableCell>
+        <Chip
+          className="text-xs font-medium shrink-0 whitespace-nowrap"
+          color={(forward as any).forwardType === "tunnel_forward" ? "warning" : "default"}
+          size="sm"
+          variant="flat"
+        >
+          {(forward as any).forwardType === "tunnel_forward" ? "隧道" : "端口"}
+        </Chip>
+      </TableCell>
+      <TableCell>
+        <Chip
+          className="text-xs font-medium shrink-0 whitespace-nowrap"
+          color="secondary"
+          size="sm"
+          variant="flat"
+        >
+          {(forward as any).protocols === "both" ? "TCP+UDP" : ((forward as any).protocols || "tcp").toUpperCase()}
+        </Chip>
+      </TableCell>
       <TableCell
         className={`${FORWARD_GROUPED_TABLE_COLUMN_CLASS.totalFlow} whitespace-nowrap`}
       >
@@ -1306,6 +1328,8 @@ export default function ForwardPage() {
     strategy: "fifo",
     engine: "auto",
     speedId: null,
+    forwardType: "port_forward",
+    protocols: "tcp",
   });
   const [inIpTouched, setInIpTouched] = useState(false);
 
@@ -2094,6 +2118,8 @@ export default function ForwardPage() {
       strategy: "fifo",
       engine: "auto",
       speedId: null,
+      forwardType: "port_forward",
+      protocols: "tcp",
     });
     setErrors({});
     setModalOpen(true);
@@ -2115,6 +2141,8 @@ export default function ForwardPage() {
       strategy: forward.strategy || "fifo",
       engine: forward.engine || "auto",
       speedId: normalizeSpeedId(forward.speedId),
+      forwardType: (forward as any).forwardType || "port_forward",
+      protocols: (forward as any).protocols || "tcp",
     });
     setErrors({});
     setModalOpen(true);
@@ -2244,6 +2272,8 @@ export default function ForwardPage() {
           strategy: addressCount > 1 ? form.strategy : "fifo",
           engine: form.engine || "auto",
           speedId: normalizedSpeedId,
+          forwardType: form.forwardType || "port_forward",
+          protocols: form.protocols || "tcp",
         };
 
         res = await updateForward(updateData);
@@ -2257,6 +2287,8 @@ export default function ForwardPage() {
           strategy: addressCount > 1 ? form.strategy : "fifo",
           engine: form.engine || "auto",
           speedId: normalizedSpeedId,
+          forwardType: form.forwardType || "port_forward",
+          protocols: form.protocols || "tcp",
         };
 
         res = await createForward(createData);
@@ -4224,6 +4256,8 @@ export default function ForwardPage() {
                         <TableColumn className="w-[180px]">入口</TableColumn>
                         <TableColumn className="w-[180px]">目标</TableColumn>
                         <TableColumn className="w-[80px]">策略</TableColumn>
+                        <TableColumn className="w-[100px]">模式</TableColumn>
+                        <TableColumn className="w-[80px]">协议</TableColumn>
                         <TableColumn className="w-[100px]">用量</TableColumn>
                         <TableColumn className="w-[80px]">状态</TableColumn>
                         <TableColumn align="left" className="w-[120px] pl-4">
@@ -4895,6 +4929,43 @@ export default function ForwardPage() {
                     <SelectItem key="auto">Auto（自动选择）</SelectItem>
                     <SelectItem key="nftables">nftables</SelectItem>
                     <SelectItem key="realm">realm</SelectItem>
+                  </Select>
+
+                  <Select
+                    description="端口转发：直接转发到目标地址；隧道转发：通过隧道链转发"
+                    label="转发模式"
+                    selectedKeys={[form.forwardType || "port_forward"]}
+                    variant="bordered"
+                    onSelectionChange={(keys) => {
+                      const selectedKey = Array.from(keys)[0] as string;
+
+                      setForm((prev) => ({
+                        ...prev,
+                        forwardType: selectedKey || "port_forward",
+                      }));
+                    }}
+                  >
+                    <SelectItem key="port_forward">端口转发</SelectItem>
+                    <SelectItem key="tunnel_forward">隧道转发</SelectItem>
+                  </Select>
+
+                  <Select
+                    description="选择支持的协议类型"
+                    label="协议"
+                    selectedKeys={[form.protocols || "tcp"]}
+                    variant="bordered"
+                    onSelectionChange={(keys) => {
+                      const selectedKey = Array.from(keys)[0] as string;
+
+                      setForm((prev) => ({
+                        ...prev,
+                        protocols: selectedKey || "tcp",
+                      }));
+                    }}
+                  >
+                    <SelectItem key="tcp">TCP</SelectItem>
+                    <SelectItem key="udp">UDP</SelectItem>
+                    <SelectItem key="both">TCP + UDP</SelectItem>
                   </Select>
 
                   {getAddressCount(form.remoteAddr) > 1 && (
