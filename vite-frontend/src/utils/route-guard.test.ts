@@ -9,8 +9,8 @@ test("resolveEntryRedirect sends authenticated users from login entry routes to 
 });
 
 test("resolveEntryRedirect sends unauthenticated users away from protected routes", () => {
-  assert.equal(resolveEntryRedirect(false, "/dashboard"), "/");
-  assert.equal(resolveEntryRedirect(false, "/node"), "/");
+  assert.equal(resolveEntryRedirect(false, "/dashboard"), "/login");
+  assert.equal(resolveEntryRedirect(false, "/node"), "/login");
 });
 
 test("resolveEntryRedirect keeps users on the current entry route when no redirect is needed", () => {

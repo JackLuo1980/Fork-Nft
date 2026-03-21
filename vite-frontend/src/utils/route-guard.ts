@@ -24,5 +24,5 @@ export const resolveEntryRedirect = (
     return ENTRY_ROUTES.has(normalizedPath) ? "/dashboard" : null;
   }
 
-  return ENTRY_ROUTES.has(normalizedPath) ? null : "/";
+  return ENTRY_ROUTES.has(normalizedPath) ? null : "/login";
 };
