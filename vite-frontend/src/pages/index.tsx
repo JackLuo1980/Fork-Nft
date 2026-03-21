@@ -162,7 +162,7 @@ export default function IndexPage() {
         >
           <Card className="w-full">
             <CardHeader className="pb-0 pt-6 px-6 flex-col items-center">
-              <h1 className={title({ size: "sm" })}>登陆</h1>
+              <h1 className={title({ size: "sm" })}>登录</h1>
               <p className="text-small text-default-500 mt-2">
                 请输入您的账号信息
               </p>

@@ -8,8 +8,9 @@ import {
   getUpdateReleaseChannel,
   hasVersionUpdate,
 } from "@/utils/version-update";
+import { resolvePoweredByBrand } from "@/components/version-footer-brand";
 
-const FALLBACK_GITHUB_REPO = "https://github.com/Sagit-chu/flux-panel";
+const FALLBACK_GITHUB_REPO = "https://github.com/JackLuo1980/realm-flow";
 
 interface VersionFooterProps {
   version: string;
@@ -102,7 +103,7 @@ export function VersionFooter({
           rel="noopener noreferrer"
           target="_blank"
         >
-          FLVX
+          {resolvePoweredByBrand(siteConfig.github_repo || FALLBACK_GITHUB_REPO)}
         </a>
       </p>
     </div>
