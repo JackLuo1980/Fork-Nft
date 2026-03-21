@@ -420,8 +420,7 @@ func (h *Handler) nodeInstall(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		ID      int64  `json:"id"`
-		Channel string `json:"channel"`
+		ID int64 `json:"id"`
 	}
 	if err := decodeJSON(r.Body, &req); err != nil {
 		response.WriteJSON(w, response.ErrDefault("请求参数错误"))
@@ -429,13 +428,6 @@ func (h *Handler) nodeInstall(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.ID <= 0 {
 		response.WriteJSON(w, response.ErrDefault("参数错误"))
-		return
-	}
-
-	channel := normalizeReleaseChannel(req.Channel)
-	_, err := resolveLatestReleaseByChannel(channel)
-	if err != nil {
-		response.WriteJSON(w, response.Err(-2, fmt.Sprintf("获取最新%s失败: %v", releaseChannelLabel(channel), err)))
 		return
 	}
 

@@ -85,10 +85,8 @@ export const getDashboardNodeExpiryList = () =>
 export const updateNode = (data: NodeMutationPayload) =>
   Network.post("/node/update", data);
 export const deleteNode = (id: number) => Network.post("/node/delete", { id });
-export const getNodeInstallCommand = (
-  id: number,
-  channel: ReleaseChannel = "stable",
-) => Network.post<string>("/node/install", { id, channel });
+export const getNodeInstallCommand = (id: number) =>
+  Network.post<string>("/node/install", { id });
 export const updateNodeOrder = (data: {
   nodes: Array<{ id: number; inx: number }>;
 }) => Network.post("/node/update-order", data);

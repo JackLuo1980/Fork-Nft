@@ -973,7 +973,7 @@ export default function NodePage() {
     );
 
     try {
-      const res = await getNodeInstallCommand(node.id, channel);
+      const res = await getNodeInstallCommand(node.id);
 
       if (res.code === 0 && res.data) {
         const copied = await tryCopyInstallCommand(res.data);

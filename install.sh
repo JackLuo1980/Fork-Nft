@@ -35,24 +35,8 @@ resolve_version() {
     return 0
   fi
 
-  latest_url="https://github.com/${REPO}/releases/latest"
-  api_url="https://api.github.com/repos/${REPO}/releases/latest"
-
-  effective_url=$(curl -fsSL -o /dev/null -w '%{url_effective}' -L "$(maybe_proxy_url "$latest_url")" 2>/dev/null || true)
-  tag="${effective_url##*/}"
-  if [[ -n "$tag" && "$tag" != "latest" ]]; then
-    echo "$tag"
-    return 0
-  fi
-
-  api_tag=$(curl -fsSL "$(maybe_proxy_url "$api_url")" 2>/dev/null | grep -m1 '"tag_name"' | sed -E 's/.*"tag_name"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/' || true)
-  if [[ -n "$api_tag" ]]; then
-    echo "$api_tag"
-    return 0
-  fi
-
-  echo "无法获取最新版本号"
-  return 1
+  echo "v1.0.0"
+  return 0
 }
 
 check_and_install_tcpkill() {
