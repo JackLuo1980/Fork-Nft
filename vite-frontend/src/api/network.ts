@@ -4,6 +4,7 @@ import {
   extractApiErrorMessage,
   isUnauthorizedError,
 } from "@/api/error-message";
+import { resolveUnauthorizedRedirect } from "@/api/network-redirect";
 import { getPanelAddresses, isWebViewFunc } from "@/utils/panel";
 import { clearSession, getToken } from "@/utils/session";
 
@@ -57,8 +58,10 @@ function handleTokenExpired() {
   clearSession();
 
   // 跳转到登录页面
-  if (window.location.pathname !== "/") {
-    window.location.href = "/";
+  const redirectTarget = resolveUnauthorizedRedirect(window.location.pathname);
+
+  if (redirectTarget) {
+    window.location.href = redirectTarget;
   }
 }
 
