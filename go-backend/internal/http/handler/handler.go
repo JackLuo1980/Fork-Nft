@@ -319,13 +319,17 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	requirePasswordChange := req.Username == "admin_user" || req.Password == "admin_user"
+	requirePasswordChange := shouldRequirePasswordChange(req.Username, req.Password)
 	response.WriteJSON(w, response.OK(map[string]interface{}{
 		"token":                 token,
 		"name":                  user.User,
 		"role_id":               user.RoleID,
 		"requirePasswordChange": requirePasswordChange,
 	}))
+}
+
+func shouldRequirePasswordChange(username, password string) bool {
+	return strings.TrimSpace(username) == "admin_user" || strings.TrimSpace(password) == "admin_user"
 }
 
 func (h *Handler) getConfigByName(w http.ResponseWriter, r *http.Request) {
